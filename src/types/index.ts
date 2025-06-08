@@ -2,6 +2,9 @@
 export interface UserProfile {
   name: string;
   monthlyIncome: number;
+  cpf?: string | null;
+  cellphone?: string | null;
+  photoUrl?: string | null; // For future use with actual image storage
 }
 
 export interface Bill {

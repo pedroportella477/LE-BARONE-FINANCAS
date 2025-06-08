@@ -14,8 +14,18 @@ const FINANCIAL_GOALS_KEY = 'lebaroneFinancasFinancialGoals';
 // --- User Profile ---
 export const getUserProfile = (): UserProfile | null => {
   if (typeof window === 'undefined') return null;
-  const profile = localStorage.getItem(USER_PROFILE_KEY);
-  return profile ? JSON.parse(profile) : null;
+  const profileString = localStorage.getItem(USER_PROFILE_KEY);
+  if (profileString) {
+    const profile = JSON.parse(profileString);
+    return {
+      name: profile.name || '',
+      monthlyIncome: profile.monthlyIncome || 0,
+      cpf: profile.cpf || null,
+      cellphone: profile.cellphone || null,
+      photoUrl: profile.photoUrl || null,
+    };
+  }
+  return null;
 };
 
 export const saveUserProfile = (profile: UserProfile): void => {

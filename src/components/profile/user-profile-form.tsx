@@ -1,3 +1,4 @@
+
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -24,10 +25,23 @@ const profileFormSchema = z.object({
     message: 'O nome deve ter pelo menos 2 caracteres.',
   }),
   monthlyIncome: z.preprocess(
-    (val) => (val === '' ? undefined : Number(val)), // Convert empty string to undefined for optional number
+    (val) => (val === '' ? undefined : Number(val)), 
     z.number({invalid_type_error: "Renda mensal deve ser um número"}).positive({
     message: 'A renda mensal deve ser um valor positivo.',
   })),
+  cpf: z.string()
+    .refine((val) => val === '' || /^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(val), {
+      message: 'CPF inválido. Formato esperado: 000.000.000-00 ou deixe em branco.',
+    })
+    .optional()
+    .nullable(),
+  cellphone: z.string()
+    .refine((val) => val === '' || /^\(\d{2}\) \d{5}-\d{4}$/.test(val), {
+      message: 'Celular inválido. Formato esperado: (00) 00000-0000 ou deixe em branco.',
+    })
+    .optional()
+    .nullable(),
+  // photoUrl will be handled internally, not directly in the form UI for upload yet
 });
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
@@ -44,6 +58,8 @@ export function UserProfileForm({ initialProfile, onSave }: UserProfileFormProps
     defaultValues: {
       name: initialProfile?.name || '',
       monthlyIncome: initialProfile?.monthlyIncome || 0,
+      cpf: initialProfile?.cpf || '',
+      cellphone: initialProfile?.cellphone || '',
     },
   });
 
@@ -51,9 +67,12 @@ export function UserProfileForm({ initialProfile, onSave }: UserProfileFormProps
     const profileData: UserProfile = {
       name: data.name,
       monthlyIncome: data.monthlyIncome,
+      cpf: data.cpf || null,
+      cellphone: data.cellphone || null,
+      photoUrl: initialProfile?.photoUrl || null, // Preserve existing photoUrl if any
     };
     saveUserProfile(profileData);
-    onSave(profileData); // Callback to update parent state if needed
+    onSave(profileData); 
     toast({
       title: 'Perfil Salvo!',
       description: 'Suas informações de perfil foram atualizadas com sucesso.',
@@ -98,6 +117,37 @@ export function UserProfileForm({ initialProfile, onSave }: UserProfileFormProps
                 </FormItem>
               )}
             />
+             <FormField
+              control={form.control}
+              name="cpf"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>CPF (Opcional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="000.000.000-00" {...field} value={field.value ?? ''} />
+                  </FormControl>
+                  <FormDescription>Seu Cadastro de Pessoa Física.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="cellphone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Celular (Opcional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="(00) 00000-0000" {...field} value={field.value ?? ''} />
+                  </FormControl>
+                  <FormDescription>Seu número de celular com DDD.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <p className="text-sm text-muted-foreground">
+              Nota: O upload de foto de perfil ainda não está implementado.
+            </p>
             <Button type="submit" className="w-full">Salvar Alterações</Button>
           </form>
         </Form>
