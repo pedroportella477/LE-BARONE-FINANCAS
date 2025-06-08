@@ -24,8 +24,8 @@ import { useToast } from '@/hooks/use-toast';
 import type { Bill } from '@/types';
 
 const paymentFormSchema = z.object({
-  paymentDate: z.date({ required_error: 'Data de pagamento é obrigatória.' }),
-  receiptNotes: z.string().optional(), // Simplified: notes about receipt instead of actual upload
+  paymentDate: z.date({ required_error: 'Data é obrigatória.' }),
+  receiptNotes: z.string().optional(), 
 });
 
 type PaymentFormValues = z.infer<typeof paymentFormSchema>;
@@ -38,6 +38,8 @@ interface PaymentFormProps {
 
 export function PaymentForm({ bill, onSave, onCancel }: PaymentFormProps) {
   const { toast } = useToast();
+  const isExpense = bill.type === 'expense';
+
   const form = useForm<PaymentFormValues>({
     resolver: zodResolver(paymentFormSchema),
     defaultValues: {
@@ -47,25 +49,25 @@ export function PaymentForm({ bill, onSave, onCancel }: PaymentFormProps) {
   });
 
   function onSubmit(data: PaymentFormValues) {
-    // Actual file upload for receipt would be more complex.
-    // For this example, we're just storing a note or a simulated path.
     onSave(bill.id, data.paymentDate.toISOString(), data.receiptNotes);
     toast({
-      title: 'Pagamento Registrado!',
-      description: `Pagamento para ${bill.payeeName} foi registrado.`,
+      title: isExpense ? 'Pagamento Registrado!' : 'Recebimento Registrado!',
+      description: `${isExpense ? 'Pagamento' : 'Recebimento'} para ${bill.payeeName} foi registrado.`,
     });
   }
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <h3 className="text-lg font-medium">Registrar Pagamento para: {bill.payeeName}</h3>
+        <h3 className="text-lg font-medium">
+          {isExpense ? 'Registrar Pagamento para: ' : 'Registrar Recebimento de: '} {bill.payeeName}
+        </h3>
         <FormField
           control={form.control}
           name="paymentDate"
           render={({ field }) => (
             <FormItem className="flex flex-col">
-              <FormLabel>Data do Pagamento</FormLabel>
+              <FormLabel>{isExpense ? 'Data do Pagamento' : 'Data do Recebimento'}</FormLabel>
               <Popover>
                 <PopoverTrigger asChild>
                   <FormControl>
@@ -116,7 +118,7 @@ export function PaymentForm({ bill, onSave, onCancel }: PaymentFormProps) {
         />
         <div className="flex justify-end gap-2 pt-4">
           <Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button>
-          <Button type="submit">Salvar Pagamento</Button>
+          <Button type="submit">{isExpense ? 'Salvar Pagamento' : 'Salvar Recebimento'}</Button>
         </div>
       </form>
     </Form>

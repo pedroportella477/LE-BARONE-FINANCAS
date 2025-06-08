@@ -19,7 +19,8 @@ export const saveUserProfile = (profile: UserProfile): void => {
 export const getBills = (): Bill[] => {
   if (typeof window === 'undefined') return [];
   const bills = localStorage.getItem(BILLS_KEY);
-  return bills ? JSON.parse(bills) : [];
+  // Ensure all bills have a type, default to 'expense' for old data
+  return bills ? JSON.parse(bills).map((bill: any) => ({ ...bill, type: bill.type || 'expense' })) : [];
 };
 
 export const saveBills = (bills: Bill[]): void => {

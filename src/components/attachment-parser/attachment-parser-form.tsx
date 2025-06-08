@@ -84,19 +84,20 @@ export function AttachmentParserForm() {
       addBill({
         payeeName: extractedData.payeeName,
         amount: extractedData.amount,
-        dueDate: extractedData.dueDate, // Assuming YYYY-MM-DD format from AI
-        attachmentType: extractedData.paymentDetails?.includes('/') ? 'pdf' : (extractedData.paymentDetails?.match(/^\d+$/) ? 'barcode' : 'pix'), // Heuristic
+        dueDate: extractedData.dueDate, 
+        type: 'expense', // Attachments are assumed to be expenses for now
+        attachmentType: extractedData.paymentDetails?.includes('/') ? 'pdf' : (extractedData.paymentDetails?.match(/^\d+$/) ? 'barcode' : 'pix'),
         attachmentValue: extractedData.paymentDetails,
       });
       toast({
-        title: 'Conta Adicionada!',
-        description: `Conta para ${extractedData.payeeName} adicionada a partir da extração.`,
+        title: 'Despesa Adicionada!',
+        description: `Despesa para ${extractedData.payeeName} adicionada a partir da extração.`,
       });
-      setExtractedData(null); // Clear after adding
+      setExtractedData(null); 
     } catch (error) {
       toast({
-        title: 'Erro ao Adicionar Conta',
-        description: 'Não foi possível adicionar a conta automaticamente.',
+        title: 'Erro ao Adicionar Despesa',
+        description: 'Não foi possível adicionar a despesa automaticamente.',
         variant: 'destructive',
       });
     }
@@ -110,7 +111,7 @@ export function AttachmentParserForm() {
           Analisador de Anexos (Beta)
         </CardTitle>
         <CardDescription>
-          Envie um PDF de boleto ou imagem de QR Code/código de barras PIX para extrair os detalhes automaticamente.
+          Envie um PDF de boleto ou imagem de QR Code/código de barras PIX para extrair os detalhes automaticamente. A transação será adicionada como uma despesa.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -160,13 +161,13 @@ export function AttachmentParserForm() {
             <CardContent className="space-y-3 text-sm">
               <p><strong>Beneficiário:</strong> {extractedData.payeeName}</p>
               <p><strong>Valor:</strong> {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(extractedData.amount)}</p>
-              <p><strong>Vencimento:</strong> {new Date(extractedData.dueDate + 'T00:00:00').toLocaleDateString('pt-BR')}</p> {/* Ensure correct date parsing */}
+              <p><strong>Vencimento:</strong> {new Date(extractedData.dueDate + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
               {extractedData.paymentDetails && <p><strong>Detalhes Pag.:</strong> {extractedData.paymentDetails}</p>}
             </CardContent>
             <CardFooter>
               <Button onClick={handleAddBillFromExtraction} variant="outline">
                 <PlusSquare className="mr-2 h-4 w-4" />
-                Adicionar esta conta
+                Adicionar esta despesa
               </Button>
             </CardFooter>
           </Card>

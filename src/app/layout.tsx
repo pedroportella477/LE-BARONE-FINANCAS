@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import Link from 'next/link';
-import { Home, User, CreditCard, FileText, Settings, PanelLeft } from 'lucide-react';
+import { Home, User, CreditCard, FileText, Settings, PanelLeft, Combine } from 'lucide-react'; // Added Combine
 
 import './globals.css';
 import { cn } from '@/lib/utils';
@@ -19,7 +19,7 @@ import {
   SidebarFooter,
   SidebarInset,
   SidebarTrigger,
-} from '@/components/ui/sidebar'; // Assuming sidebar is installed or custom
+} from '@/components/ui/sidebar'; 
 
 const inter = Inter({
   subsets: ['latin'],
@@ -32,8 +32,6 @@ export const metadata: Metadata = {
 };
 
 const NavItem = ({ href, icon: Icon, label, currentPath }: { href: string; icon: React.ElementType; label: string; currentPath: string }) => {
-  // This is a simplified active state check. For nested routes, a more robust solution might be needed.
-  // For now, it checks for exact match or if the currentPath starts with the href (for parent routes).
   const isActive = currentPath === href || (href !== '/' && currentPath.startsWith(href));
   
   return (
@@ -54,14 +52,6 @@ const NavItem = ({ href, icon: Icon, label, currentPath }: { href: string; icon:
   );
 };
 
-
-// Client component to get current path for active nav state
-// In a real app, this might come from usePathname() from next/navigation
-// For simplicity in this generation, we'll pass it down or use a client wrapper if needed.
-// However, SidebarMenuButton itself can handle active state via `isActive` prop.
-// Let's pass a placeholder for currentPath for now.
-// Actually, it's better to wrap the navigation part in a client component to use usePathname.
-
 const AppSidebarNavigation = () => {
   // In a real app router scenario, you'd use:
   // import { usePathname } from 'next/navigation';
@@ -73,7 +63,7 @@ const AppSidebarNavigation = () => {
   const navItems = [
     { href: '/', icon: Home, label: 'Dashboard' },
     { href: '/profile', icon: User, label: 'Perfil' },
-    { href: '/bills', icon: CreditCard, label: 'Contas' },
+    { href: '/bills', icon: Combine, label: 'Transações' }, // Changed Icon and Label
     { href: '/attachment-parser', icon: FileText, label: 'Analisar Anexo' },
   ];
 
@@ -117,7 +107,6 @@ export default function RootLayout({
           <SidebarInset>
             <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 backdrop-blur-sm px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6 py-4">
                <SidebarTrigger className="md:hidden" /> {/* Mobile toggle */}
-               {/* You can add breadcrumbs or page title here */}
             </header>
             <main className="flex-1 p-6 overflow-auto">
               {children}

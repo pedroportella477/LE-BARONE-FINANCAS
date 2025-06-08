@@ -8,6 +8,7 @@ export interface Bill {
   payeeName: string;
   amount: number;
   dueDate: string; // ISO string date
+  type: 'expense' | 'income'; // Added to distinguish between expense and income
   attachmentType?: 'pdf' | 'pix' | 'barcode';
   attachmentValue?: string; // file path for PDF, or string for pix/barcode
   isPaid: boolean;

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Edit, Trash2, CheckCircle, AlertCircle, FileText, Ticket, Barcode, MoreVertical, CircleDollarSign } from 'lucide-react';
+import { Edit, Trash2, CheckCircle, AlertCircle, FileText, Ticket, Barcode, MoreVertical, CircleDollarSign, TrendingDown, TrendingUp, PackageOpen } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,7 +22,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { Bill } from '@/types';
 import { cn } from '@/lib/utils';
@@ -31,7 +30,7 @@ interface BillListProps {
   bills: Bill[];
   onEditBill: (bill: Bill) => void;
   onDeleteBill: (billId: string) => void;
-  onMarkAsPaid: (bill: Bill) => void;
+  onMarkAsPaid: (bill: Bill) => void; // "Paid" means paid for expense, received for income
 }
 
 const AttachmentIcon = ({ type }: { type?: 'pdf' | 'pix' | 'barcode' }) => {
@@ -43,26 +42,68 @@ const AttachmentIcon = ({ type }: { type?: 'pdf' | 'pix' | 'barcode' }) => {
 
 export function BillList({ bills, onEditBill, onDeleteBill, onMarkAsPaid }: BillListProps) {
   if (bills.length === 0) {
-    return <p className="text-muted-foreground text-center py-8">Nenhuma conta cadastrada ainda.</p>;
+    return (
+      <div className="text-center py-12">
+        <PackageOpen className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+        <p className="text-xl font-semibold text-foreground">Nenhuma transação cadastrada.</p>
+        <p className="text-muted-foreground">Adicione suas despesas e receitas para começar.</p>
+      </div>
+    );
   }
-
-  const sortedBills = [...bills].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-                                .sort((a,b) => (a.isPaid ? 1 : 0) - (b.isPaid ? 1 : 0));
+  
+  const sortedBills = [...bills]
+    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+    .sort((a,b) => (a.isPaid ? 1 : 0) - (b.isPaid ? 1 : 0));
 
 
   return (
     <div className="space-y-4">
       {sortedBills.map((bill) => {
-        const isOverdue = !bill.isPaid && new Date(bill.dueDate) < new Date(new Date().toDateString()); // Compare dates only
+        const isOverdue = !bill.isPaid && new Date(bill.dueDate) < new Date(new Date().toDateString());
+        const isExpense = bill.type === 'expense';
+
+        let statusText = '';
+        let statusIcon = null;
+        let badgeVariant: "default" | "destructive" | "secondary" | "outline" = 'secondary';
+        let badgeBgColor = '';
+
+        if (bill.isPaid) {
+          statusText = isExpense ? 'Paga' : 'Recebida';
+          statusIcon = <CheckCircle className="mr-1 h-4 w-4" />;
+          badgeVariant = 'default';
+          badgeBgColor = isExpense ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-sky-600 hover:bg-sky-700 text-white';
+        } else if (isOverdue) {
+          statusText = isExpense ? 'Vencida' : 'Receb. Atrasado';
+          statusIcon = <AlertCircle className="mr-1 h-4 w-4" />;
+          badgeVariant = 'destructive';
+        } else {
+          statusText = isExpense ? 'Pendente' : 'A Receber';
+          badgeVariant = 'secondary';
+          badgeBgColor = isExpense ? 'bg-yellow-500 hover:bg-yellow-600 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white';
+        }
+        
+
         return (
-          <Card key={bill.id} className={cn("shadow-md transition-all hover:shadow-lg", bill.isPaid && "opacity-70 bg-secondary/30", isOverdue && "border-destructive")}>
+          <Card 
+            key={bill.id} 
+            className={cn(
+              "shadow-md transition-all hover:shadow-lg", 
+              bill.isPaid && "opacity-80 bg-card",
+              isOverdue && !bill.isPaid && "border-destructive",
+              !isExpense && !bill.isPaid && "border-sky-500",
+              !isExpense && bill.isPaid && "opacity-80 bg-card"
+            )}
+          >
             <CardHeader className="pb-3">
               <div className="flex justify-between items-start">
                 <div>
-                  <CardTitle className="text-xl">{bill.payeeName}</CardTitle>
+                  <CardTitle className="text-xl flex items-center">
+                    {isExpense ? <TrendingDown className="mr-2 h-5 w-5 text-destructive" /> : <TrendingUp className="mr-2 h-5 w-5 text-green-600" />}
+                    {bill.payeeName}
+                  </CardTitle>
                   <CardDescription className={cn(isOverdue && "text-destructive font-semibold")}>
-                    Vence em: {format(new Date(bill.dueDate), 'dd/MM/yyyy', { locale: ptBR })}
-                    {bill.attachmentType && bill.attachmentValue && (
+                    {isExpense ? 'Vence em: ' : 'Receber em: '} {format(new Date(bill.dueDate), 'dd/MM/yyyy', { locale: ptBR })}
+                    {isExpense && bill.attachmentType && bill.attachmentValue && (
                       <span className="ml-2 inline-flex items-center gap-1">
                         <AttachmentIcon type={bill.attachmentType} />
                         <span className="text-xs">{bill.attachmentType === 'pdf' ? 'PDF' : bill.attachmentType.toUpperCase()}</span>
@@ -70,19 +111,19 @@ export function BillList({ bills, onEditBill, onDeleteBill, onMarkAsPaid }: Bill
                     )}
                   </CardDescription>
                 </div>
-                <Badge variant={bill.isPaid ? 'default' : isOverdue ? 'destructive' : 'secondary'} className={cn(bill.isPaid ? "bg-green-600 hover:bg-green-700 text-white" : isOverdue ? "" : "bg-yellow-500 hover:bg-yellow-600 text-white")}>
-                  {bill.isPaid ? <CheckCircle className="mr-1 h-4 w-4" /> : isOverdue ? <AlertCircle className="mr-1 h-4 w-4" /> : null}
-                  {bill.isPaid ? 'Paga' : isOverdue ? 'Vencida' : 'Pendente'}
+                <Badge variant={badgeVariant} className={cn(badgeBgColor, !badgeBgColor && "text-white")}>
+                  {statusIcon}
+                  {statusText}
                 </Badge>
               </div>
             </CardHeader>
             <CardContent className="pb-4">
-              <div className="text-2xl font-semibold text-primary">
+              <div className={cn("text-2xl font-semibold", isExpense ? "text-destructive" : "text-green-600")}>
                 {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(bill.amount)}
               </div>
               {bill.isPaid && bill.paymentDate && (
-                <p className="text-sm text-green-700 mt-1">
-                  Pago em: {format(new Date(bill.paymentDate), 'dd/MM/yyyy', { locale: ptBR })}
+                <p className={cn("text-sm mt-1", isExpense ? "text-green-700" : "text-sky-700")}>
+                  {isExpense ? 'Pago em: ' : 'Recebido em: '} {format(new Date(bill.paymentDate), 'dd/MM/yyyy', { locale: ptBR })}
                   {bill.paymentReceipt && ` (${bill.paymentReceipt})`}
                 </p>
               )}
@@ -98,7 +139,7 @@ export function BillList({ bills, onEditBill, onDeleteBill, onMarkAsPaid }: Bill
                   {!bill.isPaid && (
                     <DropdownMenuItem onClick={() => onMarkAsPaid(bill)}>
                       <CircleDollarSign className="mr-2 h-4 w-4" />
-                      Marcar como Paga
+                      {isExpense ? 'Marcar como Paga' : 'Marcar como Recebida'}
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem onClick={() => onEditBill(bill)}>
@@ -116,7 +157,7 @@ export function BillList({ bills, onEditBill, onDeleteBill, onMarkAsPaid }: Bill
                       <AlertDialogHeader>
                         <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Tem certeza que deseja excluir a conta de "{bill.payeeName}" no valor de R$ {bill.amount.toFixed(2)}? Esta ação não pode ser desfeita.
+                          Tem certeza que deseja excluir a {isExpense ? 'despesa' : 'receita'} de "{bill.payeeName}" no valor de R$ {bill.amount.toFixed(2)}? Esta ação não pode ser desfeita.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -140,10 +181,7 @@ export function BillList({ bills, onEditBill, onDeleteBill, onMarkAsPaid }: Bill
   );
 }
 
-// Helper to get buttonVariants for AlertDialogAction destructive style
-// This is a workaround as AlertDialogAction doesn't directly accept variant prop in some shadcn versions
-// This should be imported from '@/components/ui/button'
 const buttonVariants = ({ variant }: { variant: "destructive" | "default" | "outline" | "secondary" | "ghost" | "link" | null | undefined }) => {
   if (variant === "destructive") return "bg-destructive text-destructive-foreground hover:bg-destructive/90";
-  return ""; // Default or other variants
+  return ""; 
 };

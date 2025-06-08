@@ -3,12 +3,12 @@
 import { useEffect, useState } from 'react';
 import { PlusCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { BillForm } from '@/components/bills/bill-form';
+import { BillForm, BillFormValues } from '@/components/bills/bill-form';
 import { BillList } from '@/components/bills/bill-list';
 import { PaymentForm } from '@/components/bills/payment-form';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger } from '@/components/ui/sheet';
-import { getBills, saveBills, addBill as storeAddBill, updateBill as storeUpdateBill, deleteBill as storeDeleteBill, markBillAsPaid as storeMarkBillAsPaid } from '@/lib/store';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { getBills, addBill as storeAddBill, updateBill as storeUpdateBill, deleteBill as storeDeleteBill, markBillAsPaid as storeMarkBillAsPaid } from '@/lib/store';
 import type { Bill } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -25,11 +25,8 @@ export default function BillsPage() {
   useEffect(() => {
     setBills(getBills());
     
-    // Check for URL hash to open add bill dialog
     if (typeof window !== "undefined" && window.location.hash === "#add-bill") {
       setIsBillFormOpen(true);
-      // Optional: remove the hash
-      // window.history.replaceState(null, "", window.location.pathname + window.location.search);
     }
   }, []);
 
@@ -37,30 +34,26 @@ export default function BillsPage() {
     setBills(getBills());
   };
 
-  const handleSaveBill = (billData: any /* BillFormValues */, attachmentFile?: File) => {
-    // console.log("Bill data from form:", billData);
-    // console.log("Attachment file:", attachmentFile);
-
-    if (selectedBill) { // Editing existing bill
+  const handleSaveBill = (billData: BillFormValues, attachmentFile?: File) => {
+    if (selectedBill) { 
       const updatedBill: Bill = {
         ...selectedBill,
         ...billData,
         dueDate: billData.dueDate.toISOString(),
-        // Handle attachment saving logic here if implementing file uploads
-        // For simplicity, attachmentValue from form is used directly
       };
       storeUpdateBill(updatedBill);
-      toast({ title: 'Conta Atualizada', description: `Conta para ${updatedBill.payeeName} salva.`});
-    } else { // Adding new bill
-      const newBillData = {
+      toast({ title: billData.type === 'expense' ? 'Despesa Atualizada' : 'Receita Atualizada', description: `${billData.type === 'expense' ? 'Despesa' : 'Receita'} para ${updatedBill.payeeName} salva.`});
+    } else { 
+      const newBillData: Omit<Bill, 'id' | 'createdAt' | 'isPaid'> = {
         payeeName: billData.payeeName,
         amount: billData.amount,
         dueDate: billData.dueDate.toISOString(),
+        type: billData.type,
         attachmentType: billData.attachmentType,
         attachmentValue: billData.attachmentValue,
       };
       storeAddBill(newBillData);
-      toast({ title: 'Conta Adicionada', description: `Nova conta para ${billData.payeeName} criada.`});
+      toast({ title: billData.type === 'expense' ? 'Despesa Adicionada' : 'Receita Adicionada', description: `Nova ${billData.type === 'expense' ? 'despesa' : 'receita'} para ${billData.payeeName} criada.`});
     }
     refreshBills();
     setIsBillFormOpen(false);
@@ -73,9 +66,10 @@ export default function BillsPage() {
   };
 
   const handleDeleteBill = (billId: string) => {
+    const billToDelete = bills.find(b => b.id === billId);
     storeDeleteBill(billId);
     refreshBills();
-    toast({ title: 'Conta Excluída', description: 'A conta foi removida com sucesso.', variant: 'destructive' });
+    toast({ title: billToDelete?.type === 'expense' ? 'Despesa Excluída' : 'Receita Excluída', description: `A ${billToDelete?.type === 'expense' ? 'despesa' : 'receita'} foi removida.`, variant: 'destructive' });
   };
 
   const handleOpenPaymentForm = (bill: Bill) => {
@@ -84,11 +78,12 @@ export default function BillsPage() {
   };
 
   const handleSavePayment = (billId: string, paymentDate: string, receiptNotes?: string) => {
+    const bill = bills.find(b => b.id === billId);
     storeMarkBillAsPaid(billId, paymentDate, receiptNotes);
     refreshBills();
     setIsPaymentFormOpen(false);
     setSelectedBill(null);
-    toast({ title: 'Pagamento Registrado', description: 'A conta foi marcada como paga.'});
+    toast({ title: bill?.type === 'expense' ? 'Pagamento Registrado': 'Recebimento Registrado', description: `A ${bill?.type === 'expense' ? 'despesa' : 'receita'} foi marcada como ${bill?.type === 'expense' ? 'paga' : 'recebida'}.`});
   };
   
   const FormDialogComponent = isMobile ? Sheet : Dialog;
@@ -98,9 +93,9 @@ export default function BillsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-3xl font-bold tracking-tight text-primary">Gerenciar Contas</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-primary">Gerenciar Transações</h1>
           <Button onClick={() => { setSelectedBill(null); setIsBillFormOpen(true); }}>
-            <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Nova Conta
+            <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Nova Transação
           </Button>
       </div>
 
@@ -108,19 +103,18 @@ export default function BillsPage() {
         bills={bills}
         onEditBill={handleEditBill}
         onDeleteBill={handleDeleteBill}
-        onMarkAsPaid={handleOpenPaymentForm}
+        onMarkAsPaid={handleOpenPaymentForm} // "Paid" here means paid for expense, received for income
       />
 
       <FormDialogComponent open={isBillFormOpen} onOpenChange={(open) => {
           setIsBillFormOpen(open);
           if (!open) setSelectedBill(null);
         }}>
-        {/* Trigger is handled by button above/edit actions */}
         <FormDialogContentComponent side={isMobile ? 'bottom' : undefined} className={isMobile ? "h-[90vh] overflow-y-auto" : "sm:max-w-lg"}>
           <DialogHeader>
-            <DialogTitle>{selectedBill ? 'Editar Conta' : 'Adicionar Nova Conta'}</DialogTitle>
+            <DialogTitle>{selectedBill ? (selectedBill.type === 'expense' ? 'Editar Despesa' : 'Editar Receita') : 'Adicionar Nova Transação'}</DialogTitle>
             <DialogDescription>
-              {selectedBill ? 'Modifique os detalhes da conta selecionada.' : 'Preencha os detalhes da nova conta a pagar.'}
+              {selectedBill ? `Modifique os detalhes da ${selectedBill.type === 'expense' ? 'despesa' : 'receita'} selecionada.` : 'Preencha os detalhes da nova despesa ou receita.'}
             </DialogDescription>
           </DialogHeader>
           <div className={isMobile ? "p-4" : "py-4"}>
@@ -140,8 +134,12 @@ export default function BillsPage() {
           }}>
           <FormDialogContentComponent side={isMobile ? 'bottom' : undefined} className={isMobile ? "h-auto" : "sm:max-w-md"}>
              <DialogHeader>
-                <DialogTitle>Registrar Pagamento</DialogTitle>
-                <DialogDescription>Confirme os detalhes do pagamento para {selectedBill.payeeName}.</DialogDescription>
+                <DialogTitle>{selectedBill.type === 'expense' ? 'Registrar Pagamento' : 'Registrar Recebimento'}</DialogTitle>
+                <DialogDescription>
+                  {selectedBill.type === 'expense' 
+                    ? `Confirme os detalhes do pagamento para ${selectedBill.payeeName}.`
+                    : `Confirme os detalhes do recebimento de ${selectedBill.payeeName}.`}
+                </DialogDescription>
              </DialogHeader>
              <div className={isMobile ? "p-4" : "py-4"}>
               <PaymentForm
