@@ -6,8 +6,8 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, Paperclip, Ticket, Barcode, TrendingDown, TrendingUp } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import { CalendarIcon, Paperclip, Ticket, Barcode, TrendingDown, TrendingUp, Loader2, Lightbulb } from 'lucide-react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import type { Bill } from '@/types';
 import { getExpenseCategories, getIncomeCategories } from '@/lib/store';
+import { suggestCategory } from '@/ai/flows/suggest-category-flow';
 
 
 const MAX_PDF_SIZE = 5 * 1024 * 1024; // 5MB
@@ -73,6 +74,9 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
   const { toast } = useToast();
   const [expenseCats, setExpenseCats] = useState<string[]>([]);
   const [incomeCats, setIncomeCats] = useState<string[]>([]);
+  const [isSuggestingCategory, setIsSuggestingCategory] = useState(false);
+  const [categorySuggestionError, setCategorySuggestionError] = useState<string | null>(null);
+  const suggestionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const form = useForm<BillFormValues>({
     resolver: zodResolver(billFormSchema),
@@ -88,7 +92,8 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
     },
   });
   
-  const billTypeSelected = form.watch('type');
+  const watchedPayeeName = form.watch('payeeName');
+  const watchedBillType = form.watch('type');
   const attachmentTypeSelected = form.watch('attachmentType');
   const selectedPdfFile = form.watch('attachmentPdfFile');
 
@@ -98,16 +103,65 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
   }, []);
   
   useEffect(() => {
-    // When bill type changes, reset category if it's not in the new list or not "NO_CATEGORY_VALUE"
     const currentCategory = form.getValues('category');
-    const categoriesForType = billTypeSelected === 'expense' ? expenseCats : incomeCats;
+    const categoriesForType = watchedBillType === 'expense' ? expenseCats : incomeCats;
     if (currentCategory !== NO_CATEGORY_VALUE && !categoriesForType.includes(currentCategory || '')) {
         form.setValue('category', NO_CATEGORY_VALUE, { shouldValidate: true });
     }
-  }, [billTypeSelected, expenseCats, incomeCats, form]);
+  }, [watchedBillType, expenseCats, incomeCats, form]);
 
+  const currentCategoryList = watchedBillType === 'expense' ? expenseCats : incomeCats;
 
-  const currentCategoryList = billTypeSelected === 'expense' ? expenseCats : incomeCats;
+  const triggerCategorySuggestion = useCallback(async () => {
+    if (watchedPayeeName.length < 3 || !watchedBillType || currentCategoryList.length === 0) {
+      setIsSuggestingCategory(false);
+      return;
+    }
+
+    setIsSuggestingCategory(true);
+    setCategorySuggestionError(null);
+
+    try {
+      const result = await suggestCategory({
+        payeeName: watchedPayeeName,
+        transactionType: watchedBillType,
+        availableCategories: currentCategoryList,
+      });
+
+      if (result.suggestedCategory && currentCategoryList.includes(result.suggestedCategory)) {
+        // Only set if user hasn't picked a category or if it's the default placeholder
+        const currentFormCategory = form.getValues('category');
+        if (currentFormCategory === NO_CATEGORY_VALUE || currentFormCategory === null || currentFormCategory === undefined) {
+          form.setValue('category', result.suggestedCategory, { shouldValidate: true });
+        }
+      }
+    } catch (error: any) {
+      console.error("Error suggesting category:", error);
+      setCategorySuggestionError("Erro ao sugerir categoria.");
+      // Do not toast here to avoid being too noisy, error is subtle.
+    } finally {
+      setIsSuggestingCategory(false);
+    }
+  }, [watchedPayeeName, watchedBillType, currentCategoryList, form, toast]);
+
+  useEffect(() => {
+    if (suggestionTimeoutRef.current) {
+      clearTimeout(suggestionTimeoutRef.current);
+    }
+    if (watchedPayeeName.length >= 3 && watchedBillType && !bill) { // Only suggest for new bills
+      suggestionTimeoutRef.current = setTimeout(() => {
+        triggerCategorySuggestion();
+      }, 1000); // Debounce for 1 second
+    } else {
+      setIsSuggestingCategory(false); // Clear suggestion if conditions not met
+    }
+    return () => {
+      if (suggestionTimeoutRef.current) {
+        clearTimeout(suggestionTimeoutRef.current);
+      }
+    };
+  }, [watchedPayeeName, watchedBillType, triggerCategorySuggestion, bill]);
+
 
   function onSubmit(data: BillFormValues) {
     let fileToSave: File | undefined = undefined;
@@ -125,14 +179,10 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
       fileToSave = data.attachmentPdfFile[0];
       billDataForSave.attachmentValue = fileToSave.name; 
     } else if (data.attachmentType !== 'pdf' && data.attachmentValue) {
-       // Keep existing attachmentValue if it's not a new PDF upload (e.g. PIX code)
        billDataForSave.attachmentValue = data.attachmentValue;
     } else if (data.attachmentType === 'pdf' && !fileToSave && bill?.attachmentType === 'pdf' && bill?.attachmentValue) {
-      // If editing, PDF was selected, no new file uploaded, but an old PDF attachmentValue exists
       billDataForSave.attachmentValue = bill.attachmentValue;
     } else {
-      // Clear attachmentValue if type is not PDF and no value is provided, or if PDF type with no file.
-      // (Except if it's an existing PDF attachment and no new file)
       if(!(data.attachmentType === 'pdf' && bill?.attachmentType === 'pdf' && bill?.attachmentValue && !fileToSave)){
          billDataForSave.attachmentValue = data.attachmentType ? data.attachmentValue : undefined;
       }
@@ -140,10 +190,10 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
     
     onSave(billDataForSave as BillFormValues, fileToSave); 
     
-    const actionText = bill ? (billTypeSelected === 'expense' ? 'Despesa Atualizada!' : 'Receita Atualizada!') : (billTypeSelected === 'expense' ? 'Despesa Adicionada!' : 'Receita Adicionada!');
+    const actionText = bill ? (watchedBillType === 'expense' ? 'Despesa Atualizada!' : 'Receita Atualizada!') : (watchedBillType === 'expense' ? 'Despesa Adicionada!' : 'Receita Adicionada!');
     toast({
       title: actionText,
-      description: `${billTypeSelected === 'expense' ? 'A despesa' : 'A receita'} para ${data.payeeName} foi salva.`,
+      description: `${watchedBillType === 'expense' ? 'A despesa' : 'A receita'} para ${data.payeeName} foi salva.`,
     });
     form.reset({
         payeeName: '', 
@@ -155,6 +205,8 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
         attachmentValue: '', 
         attachmentPdfFile: undefined
     });
+    setIsSuggestingCategory(false);
+    setCategorySuggestionError(null);
   }
 
   return (
@@ -198,9 +250,9 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
           name="payeeName"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{billTypeSelected === 'expense' ? 'Nome do Beneficiário' : 'Origem da Receita'}</FormLabel>
+              <FormLabel>{watchedBillType === 'expense' ? 'Nome do Beneficiário' : 'Origem da Receita'}</FormLabel>
               <FormControl>
-                <Input placeholder={billTypeSelected === 'expense' ? "Ex: Empresa de Luz" : "Ex: Salário, Cliente X"} {...field} />
+                <Input placeholder={watchedBillType === 'expense' ? "Ex: Empresa de Luz" : "Ex: Salário, Cliente X"} {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -224,7 +276,7 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
           name="dueDate"
           render={({ field }) => (
             <FormItem className="flex flex-col">
-              <FormLabel>{billTypeSelected === 'expense' ? 'Data de Vencimento' : 'Data de Recebimento'}</FormLabel>
+              <FormLabel>{watchedBillType === 'expense' ? 'Data de Vencimento' : 'Data de Recebimento'}</FormLabel>
               <Popover>
                 <PopoverTrigger asChild>
                   <FormControl>
@@ -263,7 +315,13 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
           name="category"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Categoria (Opcional)</FormLabel>
+              <FormLabel className="flex items-center">
+                Categoria (Opcional)
+                {isSuggestingCategory && <Loader2 className="ml-2 h-4 w-4 animate-spin text-primary" />}
+                {/* Optional: Show lightbulb if AI successfully suggested and field was auto-filled */}
+                {/* {!isSuggestingCategory && form.getValues('category') !== NO_CATEGORY_VALUE && form.getValues('category') !== bill?.category && <Lightbulb className="ml-2 h-4 w-4 text-yellow-500" />} */}
+
+              </FormLabel>
                 <Select
                   onValueChange={(value) => field.onChange(value === NO_CATEGORY_VALUE ? null : value)}
                   value={field.value === null || field.value === undefined ? NO_CATEGORY_VALUE : field.value}
@@ -284,6 +342,7 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
               </Select>
               <FormDescription>
                 Agrupe suas transações por categoria. Você pode gerenciar as categorias na página de Perfil.
+                 {categorySuggestionError && <span className="text-destructive"> {categorySuggestionError}</span>}
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -291,7 +350,7 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
         />
 
 
-        {billTypeSelected === 'expense' && (
+        {watchedBillType === 'expense' && (
           <>
             <FormField
               control={form.control}
@@ -394,7 +453,7 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
 
         <div className="flex justify-end gap-2">
           {onCancel && <Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button>}
-          <Button type="submit">{bill ? (billTypeSelected === 'expense' ? 'Salvar Despesa' : 'Salvar Receita') : (billTypeSelected === 'expense' ? 'Adicionar Despesa' : 'Adicionar Receita')}</Button>
+          <Button type="submit">{bill ? (watchedBillType === 'expense' ? 'Salvar Despesa' : 'Salvar Receita') : (watchedBillType === 'expense' ? 'Adicionar Despesa' : 'Adicionar Receita')}</Button>
         </div>
       </form>
     </Form>
