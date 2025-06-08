@@ -40,6 +40,7 @@ export default function BillsPage() {
         ...selectedBill,
         ...billData,
         dueDate: billData.dueDate.toISOString(),
+        category: billData.category || undefined,
       };
       storeUpdateBill(updatedBill);
       toast({ title: billData.type === 'expense' ? 'Despesa Atualizada' : 'Receita Atualizada', description: `${billData.type === 'expense' ? 'Despesa' : 'Receita'} para ${updatedBill.payeeName} salva.`});
@@ -49,6 +50,7 @@ export default function BillsPage() {
         amount: billData.amount,
         dueDate: billData.dueDate.toISOString(),
         type: billData.type,
+        category: billData.category || undefined,
         attachmentType: billData.attachmentType,
         attachmentValue: billData.attachmentValue,
       };

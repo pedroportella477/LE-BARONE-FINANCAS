@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, Paperclip, Ticket, Barcode, TrendingDown, TrendingUp } from 'lucide-react';
+import { CalendarIcon, Paperclip, Ticket, Barcode, TrendingDown, TrendingUp, Tag } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -33,6 +33,7 @@ const billFormSchema = z.object({
   ),
   dueDate: z.date({ required_error: 'Data de vencimento/recebimento é obrigatória.' }),
   type: z.enum(['expense', 'income'], { required_error: 'Selecione o tipo.'}),
+  category: z.string().optional(),
   attachmentType: z.enum(['pdf', 'pix', 'barcode']).optional(),
   attachmentValue: z.string().optional(),
 });
@@ -55,6 +56,7 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
       amount: bill?.amount || 0,
       dueDate: bill?.dueDate ? new Date(bill.dueDate) : new Date(),
       type: bill?.type || 'expense',
+      category: bill?.category || '',
       attachmentType: bill?.attachmentType || undefined,
       attachmentValue: bill?.attachmentValue || '',
     },
@@ -70,7 +72,7 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
       title: actionText,
       description: `${billTypeSelected === 'expense' ? 'A despesa' : 'A receita'} para ${data.payeeName} foi salva.`,
     });
-    form.reset({dueDate: new Date(), type: 'expense', amount: 0, payeeName: ''}); // Reset with defaults
+    form.reset({dueDate: new Date(), type: 'expense', amount: 0, payeeName: '', category: ''}); // Reset with defaults
   }
 
   return (
@@ -163,6 +165,27 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
             </FormItem>
           )}
         />
+
+        <FormField
+          control={form.control}
+          name="category"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Categoria (Opcional)</FormLabel>
+              <FormControl>
+                <div className="relative">
+                   <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                   <Input placeholder="Ex: Alimentação, Transporte, Salário" {...field} className="pl-10" />
+                </div>
+              </FormControl>
+              <FormDescription>
+                Agrupe suas transações por categoria.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
 
         {billTypeSelected === 'expense' && (
           <>

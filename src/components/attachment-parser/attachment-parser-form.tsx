@@ -123,6 +123,7 @@ export function AttachmentParserForm() {
         amount: extractedData.amount,
         dueDate: extractedData.dueDate, 
         type: 'expense', // Attachments are assumed to be expenses for now
+        category: 'Anexo Importado', // Default category for imported attachments
         attachmentType: billAttachmentType,
         attachmentValue: extractedData.paymentDetails,
       });
@@ -150,7 +151,7 @@ export function AttachmentParserForm() {
           Analisador de Anexos (Beta)
         </CardTitle>
         <CardDescription>
-          Envie um PDF de boleto ou imagem de QR Code/código de barras PIX para extrair os detalhes automaticamente. A transação será adicionada como uma despesa.
+          Envie um PDF de boleto ou imagem de QR Code/código de barras PIX para extrair os detalhes automaticamente. A transação será adicionada como uma despesa com a categoria "Anexo Importado".
         </CardDescription>
       </CardHeader>
       <CardContent>

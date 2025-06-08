@@ -20,7 +20,8 @@ export const getBills = (): Bill[] => {
   if (typeof window === 'undefined') return [];
   const bills = localStorage.getItem(BILLS_KEY);
   // Ensure all bills have a type, default to 'expense' for old data
-  return bills ? JSON.parse(bills).map((bill: any) => ({ ...bill, type: bill.type || 'expense' })) : [];
+  // Ensure all bills have category as optional
+  return bills ? JSON.parse(bills).map((bill: any) => ({ ...bill, type: bill.type || 'expense', category: bill.category })) : [];
 };
 
 export const saveBills = (bills: Bill[]): void => {
@@ -35,6 +36,7 @@ export const addBill = (bill: Omit<Bill, 'id' | 'createdAt' | 'isPaid'>): Bill =
     id: Date.now().toString(),
     createdAt: new Date().toISOString(),
     isPaid: false,
+    category: bill.category || undefined, // Ensure category is handled
   };
   const updatedBills = [...bills, newBill];
   saveBills(updatedBills);
@@ -43,7 +45,7 @@ export const addBill = (bill: Omit<Bill, 'id' | 'createdAt' | 'isPaid'>): Bill =
 
 export const updateBill = (updatedBill: Bill): void => {
   let bills = getBills();
-  bills = bills.map(bill => (bill.id === updatedBill.id ? updatedBill : bill));
+  bills = bills.map(bill => (bill.id === updatedBill.id ? { ...bill, ...updatedBill, category: updatedBill.category || undefined } : bill));
   saveBills(bills);
 };
 

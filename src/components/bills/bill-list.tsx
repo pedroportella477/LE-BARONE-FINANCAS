@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Edit, Trash2, CheckCircle, AlertCircle, FileText, Ticket, Barcode, MoreVertical, CircleDollarSign, TrendingDown, TrendingUp, PackageOpen } from 'lucide-react';
+import { Edit, Trash2, CheckCircle, AlertCircle, FileText, Ticket, Barcode, MoreVertical, CircleDollarSign, TrendingDown, TrendingUp, PackageOpen, Tag } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -101,7 +101,7 @@ export function BillList({ bills, onEditBill, onDeleteBill, onMarkAsPaid }: Bill
                     {isExpense ? <TrendingDown className="mr-2 h-5 w-5 text-destructive" /> : <TrendingUp className="mr-2 h-5 w-5 text-green-600" />}
                     {bill.payeeName}
                   </CardTitle>
-                  <CardDescription className={cn(isOverdue && "text-destructive font-semibold")}>
+                  <CardDescription className={cn("mt-1", isOverdue && "text-destructive font-semibold")}>
                     {isExpense ? 'Vence em: ' : 'Receber em: '} {format(new Date(bill.dueDate), 'dd/MM/yyyy', { locale: ptBR })}
                     {isExpense && bill.attachmentType && bill.attachmentValue && (
                       <span className="ml-2 inline-flex items-center gap-1">
@@ -110,6 +110,12 @@ export function BillList({ bills, onEditBill, onDeleteBill, onMarkAsPaid }: Bill
                       </span>
                     )}
                   </CardDescription>
+                   {bill.category && (
+                    <div className="mt-1 flex items-center text-xs text-muted-foreground">
+                      <Tag className="mr-1 h-3 w-3" />
+                      {bill.category}
+                    </div>
+                  )}
                 </div>
                 <Badge variant={badgeVariant} className={cn(badgeBgColor, !badgeBgColor && "text-white")}>
                   {statusIcon}
