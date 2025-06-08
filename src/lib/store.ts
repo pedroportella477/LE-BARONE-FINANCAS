@@ -1,11 +1,13 @@
 
-import type { UserProfile, Bill } from '@/types';
+import type { UserProfile, Bill, RecurringBill, RecurrenceFrequency } from '@/types';
 import { defaultExpenseCategories, defaultIncomeCategories, defaultCategoryForAttachment } from './categories';
+import { addDays, addWeeks, addMonths, addYears, formatISO } from 'date-fns';
 
 const USER_PROFILE_KEY = 'lebaroneFinancasUserProfile';
 const BILLS_KEY = 'lebaroneFinancasBills';
 const EXPENSE_CATEGORIES_KEY = 'lebaroneFinancasExpenseCategories';
 const INCOME_CATEGORIES_KEY = 'lebaroneFinancasIncomeCategories';
+const RECURRING_BILLS_KEY = 'lebaroneFinancasRecurringBills';
 
 // --- User Profile ---
 export const getUserProfile = (): UserProfile | null => {
@@ -71,7 +73,6 @@ export const deleteExpenseCategory = (categoryToDelete: string): string[] => {
   let categories = getExpenseCategories();
   categories = categories.filter(category => category !== categoryToDelete);
   saveCategories(EXPENSE_CATEGORIES_KEY, categories);
-  // Also update bills that might use this category? For now, no. Bill keeps the string.
   return categories;
 };
 
@@ -117,6 +118,7 @@ export const getBills = (): Bill[] => {
         attachmentValue: typeof bill.attachmentValue === 'string' ? bill.attachmentValue : undefined,
         paymentDate: typeof bill.paymentDate === 'string' ? bill.paymentDate : undefined,
         paymentReceipt: typeof bill.paymentReceipt === 'string' ? bill.paymentReceipt : undefined,
+        recurringBillId: typeof bill.recurringBillId === 'string' ? bill.recurringBillId : undefined,
       };
     }).filter(bill => bill.id && bill.payeeName && bill.dueDate && bill.createdAt);
   } catch (error) {
@@ -131,16 +133,15 @@ export const saveBills = (bills: Bill[]): void => {
   localStorage.setItem(BILLS_KEY, JSON.stringify(bills));
 };
 
-export const addBill = (billData: Omit<Bill, 'id' | 'createdAt' | 'isPaid'>): Bill => {
+export const addBill = (billData: Omit<Bill, 'id' | 'createdAt' | 'isPaid'>, isInstanceFromRecurring: boolean = false): Bill => {
   const bills = getBills();
   
-  // Ensure "Anexo Importado" category exists if used
-  if (billData.type === 'expense' && billData.category === defaultCategoryForAttachment) {
+  if (!isInstanceFromRecurring && billData.type === 'expense' && billData.category === defaultCategoryForAttachment) {
     addExpenseCategory(defaultCategoryForAttachment);
   }
 
   const newBill: Bill = {
-    id: Date.now().toString(),
+    id: Date.now().toString() + Math.random().toString().slice(2, 8), // More robust ID
     createdAt: new Date().toISOString(),
     isPaid: false,
     payeeName: billData.payeeName,
@@ -150,6 +151,7 @@ export const addBill = (billData: Omit<Bill, 'id' | 'createdAt' | 'isPaid'>): Bi
     category: billData.category || null,
     attachmentType: billData.attachmentType,
     attachmentValue: billData.attachmentValue,
+    recurringBillId: billData.recurringBillId,
   };
   
   const updatedBills = [...bills, newBill];
@@ -189,4 +191,77 @@ export const markBillAsPaid = (billId: string, paymentDate: string, receiptNotes
   bills[billIndex] = updatedBill;
   saveBills(bills);
   return updatedBill;
+};
+
+// --- Recurring Bills ---
+
+export const calculateNextDueDate = (
+  currentOrStartDate: Date,
+  frequency: RecurrenceFrequency,
+  interval: number
+): Date => {
+  switch (frequency) {
+    case 'daily':
+      return addDays(currentOrStartDate, interval);
+    case 'weekly':
+      return addWeeks(currentOrStartDate, interval);
+    case 'monthly':
+      return addMonths(currentOrStartDate, interval);
+    case 'yearly':
+      return addYears(currentOrStartDate, interval);
+    default:
+      throw new Error('Invalid recurrence frequency');
+  }
+};
+
+export const getRecurringBills = (): RecurringBill[] => {
+  if (typeof window === 'undefined') return [];
+  const storedRecurringBills = localStorage.getItem(RECURRING_BILLS_KEY);
+  return storedRecurringBills ? JSON.parse(storedRecurringBills) : [];
+};
+
+export const saveRecurringBills = (recurringBills: RecurringBill[]): void => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(RECURRING_BILLS_KEY, JSON.stringify(recurringBills));
+};
+
+export const addRecurringBill = (
+  data: Omit<RecurringBill, 'id' | 'createdAt' | 'nextDueDate' | 'lastGeneratedDate'>
+): RecurringBill => {
+  const recurringBills = getRecurringBills();
+  const startDate = new Date(data.startDate);
+  
+  // The first 'nextDueDate' is simply the startDate if no instances have been generated yet.
+  // Or, if we decide to generate the first instance immediately upon creation,
+  // then nextDueDate should be startDate, and an instance is created for startDate.
+  // For simplicity now, nextDueDate will be the first date an instance *should* be created.
+  const nextDueDate = startDate;
+
+  const newRecurringBill: RecurringBill = {
+    ...data,
+    id: Date.now().toString() + Math.random().toString().slice(2, 8),
+    createdAt: new Date().toISOString(),
+    nextDueDate: formatISO(nextDueDate, { representation: 'date' }),
+    lastGeneratedDate: null, // No instances generated yet
+    category: data.category || null,
+    endDate: data.endDate || null,
+  };
+  const updatedRecurringBills = [...recurringBills, newRecurringBill];
+  saveRecurringBills(updatedRecurringBills);
+  return newRecurringBill;
+};
+
+export const updateRecurringBill = (updatedData: RecurringBill): void => {
+  let recurringBills = getRecurringBills();
+  recurringBills = recurringBills.map(rb =>
+    rb.id === updatedData.id ? { ...rb, ...updatedData, category: updatedData.category || null, endDate: updatedData.endDate || null } : rb
+  );
+  saveRecurringBills(recurringBills);
+};
+
+export const deleteRecurringBill = (recurringBillId: string): void => {
+  let recurringBills = getRecurringBills();
+  recurringBills = recurringBills.filter(rb => rb.id !== recurringBillId);
+  saveRecurringBills(recurringBills);
+  // Optionally, also delete generated Bill instances? For now, no.
 };

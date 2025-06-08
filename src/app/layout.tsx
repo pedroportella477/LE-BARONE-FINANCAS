@@ -1,7 +1,8 @@
+
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import Link from 'next/link';
-import { Home, User, CreditCard, FileText, Settings, PanelLeft, Combine } from 'lucide-react'; // Added Combine
+import { Home, User, Combine, FileText, Settings, PanelLeft, Repeat } from 'lucide-react'; // Added Repeat
 
 import './globals.css';
 import { cn } from '@/lib/utils';
@@ -53,18 +54,14 @@ const NavItem = ({ href, icon: Icon, label, currentPath }: { href: string; icon:
 };
 
 const AppSidebarNavigation = () => {
-  // In a real app router scenario, you'd use:
-  // import { usePathname } from 'next/navigation';
-  // const pathname = usePathname();
-  // For now, we'll simulate it or just rely on manual active state for demonstration
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/';
-
 
   const navItems = [
     { href: '/', icon: Home, label: 'Dashboard' },
-    { href: '/profile', icon: User, label: 'Perfil' },
-    { href: '/bills', icon: Combine, label: 'Transações' }, // Changed Icon and Label
+    { href: '/bills', icon: Combine, label: 'Transações' },
+    { href: '/recurring-transactions', icon: Repeat, label: 'Recorrentes' },
     { href: '/attachment-parser', icon: FileText, label: 'Analisar Anexo' },
+    { href: '/profile', icon: User, label: 'Perfil' },
   ];
 
   return (
@@ -106,7 +103,7 @@ export default function RootLayout({
           </Sidebar>
           <SidebarInset>
             <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 backdrop-blur-sm px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6 py-4">
-               <SidebarTrigger className="md:hidden" /> {/* Mobile toggle */}
+               <SidebarTrigger className="md:hidden" />
             </header>
             <main className="flex-1 p-6 overflow-auto">
               {children}
