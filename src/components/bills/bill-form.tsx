@@ -35,7 +35,7 @@ const billFormSchema = z.object({
   ),
   dueDate: z.date({ required_error: 'Data de vencimento/recebimento é obrigatória.' }),
   type: z.enum(['expense', 'income'], { required_error: 'Selecione o tipo.'}),
-  category: z.string().optional().nullable(), // Allow null for no selection
+  category: z.string().nullable().optional(), // string | null | undefined
   attachmentType: z.enum(['pdf', 'pix', 'barcode']).optional(),
   attachmentValue: z.string().optional(),
 });
@@ -70,6 +70,7 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
   const currentCategoryList = billTypeSelected === 'expense' ? expenseCategories : incomeCategories;
 
   function onSubmit(data: BillFormValues) {
+    // data.category here will be string | null due to onValueChange mapping
     onSave(data);
     const actionText = bill ? (billTypeSelected === 'expense' ? 'Despesa Atualizada!' : 'Receita Atualizada!') : (billTypeSelected === 'expense' ? 'Despesa Adicionada!' : 'Receita Adicionada!');
     toast({
@@ -91,7 +92,7 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
               <Select 
                 onValueChange={(value) => {
                   field.onChange(value);
-                  form.setValue('category', null); // Reset category when type changes
+                  form.setValue('category', null, { shouldValidate: true }); 
                 }} 
                 defaultValue={field.value}
               >
@@ -179,10 +180,13 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
         <FormField
           control={form.control}
           name="category"
-          render={({ field }) => (
+          render={({ field }) => ( // field.value is string | null
             <FormItem>
               <FormLabel>Categoria (Opcional)</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value || ""}>
+                <Select 
+                  onValueChange={(value) => field.onChange(value === "" ? null : value)} // Pass null to form state if "Nenhuma" (value="") is selected
+                  value={field.value ?? ""} // If form state is null, Select gets value "", corresponding to "Nenhuma"
+                >
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione uma categoria" />
