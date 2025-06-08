@@ -50,3 +50,10 @@ export interface AttachmentData {
   dueDate: string;
   paymentDetails?: string;
 }
+
+export interface Budget {
+  id: string;
+  category: string; // Links to an expense category name
+  limit: number;
+  createdAt: string; // ISO string date
+}

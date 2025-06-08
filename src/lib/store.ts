@@ -1,5 +1,5 @@
 
-import type { UserProfile, Bill, RecurringBill, RecurrenceFrequency } from '@/types';
+import type { UserProfile, Bill, RecurringBill, RecurrenceFrequency, Budget } from '@/types';
 import { defaultExpenseCategories, defaultIncomeCategories, defaultCategoryForAttachment } from './categories';
 import { addDays, addWeeks, addMonths, addYears, formatISO, parseISO, isBefore, isEqual, startOfDay } from 'date-fns';
 
@@ -8,6 +8,7 @@ const BILLS_KEY = 'lebaroneFinancasBills';
 const EXPENSE_CATEGORIES_KEY = 'lebaroneFinancasExpenseCategories';
 const INCOME_CATEGORIES_KEY = 'lebaroneFinancasIncomeCategories';
 const RECURRING_BILLS_KEY = 'lebaroneFinancasRecurringBills';
+const BUDGETS_KEY = 'lebaroneFinancasBudgets';
 
 // --- User Profile ---
 export const getUserProfile = (): UserProfile | null => {
@@ -26,7 +27,14 @@ const initializeCategories = (key: string, defaultCategories: string[], specialD
   if (typeof window === 'undefined') return [...defaultCategories];
   const stored = localStorage.getItem(key);
   if (stored) {
-    return JSON.parse(stored);
+    try {
+      const parsedCategories = JSON.parse(stored);
+      if (Array.isArray(parsedCategories) && parsedCategories.every(c => typeof c === 'string')) {
+        return parsedCategories;
+      }
+    } catch (e) {
+      console.error(`Error parsing categories from ${key}:`, e);
+    }
   }
   let initialCategories = [...defaultCategories];
   if (specialDefault && !initialCategories.includes(specialDefault)) {
@@ -276,9 +284,6 @@ export const addRecurringBill = (
 
 export const updateRecurringBill = (updatedData: RecurringBill): void => {
   let recurringBills = getRecurringBills();
-  // Ensure nextDueDate is recalculated if startDate, frequency, or interval changes significantly
-  // For simplicity, if editing, we assume nextDueDate might need to be preserved or smartly updated by the form/caller.
-  // However, if `startDate` is changed to be after `nextDueDate`, `nextDueDate` should become `startDate`.
   let finalData = { ...updatedData };
   if (parseISO(finalData.startDate) > parseISO(finalData.nextDueDate)) {
     finalData.nextDueDate = finalData.startDate;
@@ -310,7 +315,6 @@ export const processRecurringBills = (): { generatedCount: number, updatedBills:
     let currentNextDueDate = parseISO(rb.nextDueDate);
     const rbStartDate = parseISO(rb.startDate);
 
-    // Ensure nextDueDate is not before startDate
     if (isBefore(currentNextDueDate, rbStartDate)) {
       currentNextDueDate = rbStartDate;
       rb.nextDueDate = formatISO(currentNextDueDate, { representation: 'date' });
@@ -322,7 +326,6 @@ export const processRecurringBills = (): { generatedCount: number, updatedBills:
       (isBefore(currentNextDueDate, today) || isEqual(currentNextDueDate, today)) &&
       (!rb.endDate || isBefore(currentNextDueDate, parseISO(rb.endDate)) || isEqual(currentNextDueDate, parseISO(rb.endDate)))
     ) {
-      // Check if an instance for this specific recurring bill and this specific due date already exists
       const instanceExists = allBills.some(
         bill => bill.recurringBillId === rb.id && bill.dueDate === formatISO(currentNextDueDate, { representation: 'date' })
       );
@@ -336,20 +339,18 @@ export const processRecurringBills = (): { generatedCount: number, updatedBills:
           category: rb.category || null,
           recurringBillId: rb.id,
         };
-        const createdBill = addBill(newBillData, true); // Pass true for isInstanceFromRecurring
-        allBills = [...allBills, createdBill]; // Manually update allBills for subsequent checks within this loop
+        const createdBill = addBill(newBillData, true); 
+        allBills = [...allBills, createdBill]; 
         generatedCount++;
         instancesToCreateForThisRb++;
         rb.lastGeneratedDate = formatISO(currentNextDueDate, { representation: 'date' });
       }
       
-      // Calculate the next due date based on the *current* (just processed) due date
       const nextIterationDueDate = calculateNextDueDate(formatISO(currentNextDueDate, {representation: 'date'}), rb.frequency, rb.interval);
       currentNextDueDate = parseISO(nextIterationDueDate);
-      rb.nextDueDate = nextIterationDueDate; // Update recurring bill's next due date for saving
+      rb.nextDueDate = nextIterationDueDate; 
       
-      // Safety break for misconfiguration or very long intervals catching up
-      if (instancesToCreateForThisRb > 100) { // Arbitrary limit
+      if (instancesToCreateForThisRb > 100) { 
           console.warn(`Recurring bill ${rb.id} generated over 100 instances in one go. Breaking to prevent infinite loop.`);
           break;
       }
@@ -357,11 +358,68 @@ export const processRecurringBills = (): { generatedCount: number, updatedBills:
     updatedRecurringDefinitions.push(rb);
   });
 
-  if (generatedCount > 0) {
+  if (generatedCount > 0 || updatedRecurringDefinitions.length > 0) { // Save if any change or generation occurred
     saveRecurringBills(updatedRecurringDefinitions);
-    // saveBills(allBills) is called within addBill, but if we modified allBills directly without calling addBill each time, we'd need it here.
-    // Since addBill calls saveBills, it's okay for now.
   }
   
-  return { generatedCount, updatedBills: getBills() }; // Return the latest state of bills
+  return { generatedCount, updatedBills: getBills() }; 
+};
+
+// --- Budgets ---
+export const getBudgets = (): Budget[] => {
+  if (typeof window === 'undefined') return [];
+  const storedBudgets = localStorage.getItem(BUDGETS_KEY);
+  if (!storedBudgets) return [];
+  try {
+    const parsed = JSON.parse(storedBudgets) as Budget[];
+    return parsed.map(b => ({
+      id: b.id || Date.now().toString(),
+      category: b.category || 'Sem Categoria', // Ensure category exists
+      limit: Number(b.limit) || 0,
+      createdAt: b.createdAt || new Date().toISOString(),
+    }));
+  } catch (error) {
+    console.error("Error parsing budgets from localStorage:", error);
+    localStorage.removeItem(BUDGETS_KEY);
+    return [];
+  }
+};
+
+export const saveBudgets = (budgets: Budget[]): void => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(BUDGETS_KEY, JSON.stringify(budgets));
+};
+
+export const addBudget = (budgetData: Omit<Budget, 'id' | 'createdAt'>): Budget => {
+  const budgets = getBudgets();
+  // Check if a budget for this category already exists
+  const existingBudget = budgets.find(b => b.category === budgetData.category);
+  if (existingBudget) {
+    // Optionally, update the existing budget or throw an error/return existing
+    // For now, let's update it if it exists.
+    const updatedBudget: Budget = { ...existingBudget, limit: budgetData.limit };
+    updateBudget(updatedBudget);
+    return updatedBudget;
+  }
+
+  const newBudget: Budget = {
+    ...budgetData,
+    id: Date.now().toString() + Math.random().toString().slice(2, 8),
+    createdAt: new Date().toISOString(),
+  };
+  const updatedBudgets = [...budgets, newBudget];
+  saveBudgets(updatedBudgets);
+  return newBudget;
+};
+
+export const updateBudget = (updatedBudgetData: Budget): void => {
+  let budgets = getBudgets();
+  budgets = budgets.map(b => (b.id === updatedBudgetData.id ? updatedBudgetData : b));
+  saveBudgets(budgets);
+};
+
+export const deleteBudget = (budgetId: string): void => {
+  let budgets = getBudgets();
+  budgets = budgets.filter(b => b.id !== budgetId);
+  saveBudgets(budgets);
 };
