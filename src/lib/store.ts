@@ -1,4 +1,6 @@
+
 import type { UserProfile, Bill } from '@/types';
+import { defaultCategoryForAttachment } from './categories';
 
 const USER_PROFILE_KEY = 'lebaroneFinancasUserProfile';
 const BILLS_KEY = 'lebaroneFinancasBills';
@@ -19,9 +21,11 @@ export const saveUserProfile = (profile: UserProfile): void => {
 export const getBills = (): Bill[] => {
   if (typeof window === 'undefined') return [];
   const bills = localStorage.getItem(BILLS_KEY);
-  // Ensure all bills have a type, default to 'expense' for old data
-  // Ensure all bills have category as optional
-  return bills ? JSON.parse(bills).map((bill: any) => ({ ...bill, type: bill.type || 'expense', category: bill.category })) : [];
+  return bills ? JSON.parse(bills).map((bill: any) => ({ 
+    ...bill, 
+    type: bill.type || 'expense', 
+    category: bill.category === undefined ? null : bill.category 
+  })) : [];
 };
 
 export const saveBills = (bills: Bill[]): void => {
@@ -36,8 +40,13 @@ export const addBill = (bill: Omit<Bill, 'id' | 'createdAt' | 'isPaid'>): Bill =
     id: Date.now().toString(),
     createdAt: new Date().toISOString(),
     isPaid: false,
-    category: bill.category || undefined, // Ensure category is handled
+    category: bill.category === undefined ? null : bill.category,
   };
+  // Ensure attachment-parsed bills get the default category if none is provided
+  if (bill.category === defaultCategoryForAttachment && !newBill.category) {
+    newBill.category = defaultCategoryForAttachment;
+  }
+  
   const updatedBills = [...bills, newBill];
   saveBills(updatedBills);
   return newBill;
@@ -45,7 +54,7 @@ export const addBill = (bill: Omit<Bill, 'id' | 'createdAt' | 'isPaid'>): Bill =
 
 export const updateBill = (updatedBill: Bill): void => {
   let bills = getBills();
-  bills = bills.map(bill => (bill.id === updatedBill.id ? { ...bill, ...updatedBill, category: updatedBill.category || undefined } : bill));
+  bills = bills.map(bill => (bill.id === updatedBill.id ? { ...bill, ...updatedBill, category: updatedBill.category === undefined ? null : updatedBill.category } : bill));
   saveBills(bills);
 };
 
@@ -55,7 +64,7 @@ export const deleteBill = (billId: string): void => {
   saveBills(bills);
 };
 
-export const markBillAsPaid = (billId: string, paymentDate: string, receiptUrl?: string): Bill | undefined => {
+export const markBillAsPaid = (billId: string, paymentDate: string, receiptNotes?: string): Bill | undefined => {
   const bills = getBills();
   const billIndex = bills.findIndex(b => b.id === billId);
   if (billIndex === -1) return undefined;
@@ -64,7 +73,7 @@ export const markBillAsPaid = (billId: string, paymentDate: string, receiptUrl?:
     ...bills[billIndex],
     isPaid: true,
     paymentDate: paymentDate,
-    paymentReceipt: receiptUrl,
+    paymentReceipt: receiptNotes,
   };
   bills[billIndex] = updatedBill;
   saveBills(bills);

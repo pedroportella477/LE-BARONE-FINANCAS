@@ -1,3 +1,4 @@
+
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -24,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import type { Bill } from '@/types';
+import { expenseCategories, incomeCategories } from '@/lib/categories';
 
 const billFormSchema = z.object({
   payeeName: z.string().min(2, { message: 'Nome do beneficiário/origem deve ter pelo menos 2 caracteres.' }),
@@ -33,7 +35,7 @@ const billFormSchema = z.object({
   ),
   dueDate: z.date({ required_error: 'Data de vencimento/recebimento é obrigatória.' }),
   type: z.enum(['expense', 'income'], { required_error: 'Selecione o tipo.'}),
-  category: z.string().optional(),
+  category: z.string().optional().nullable(), // Allow null for no selection
   attachmentType: z.enum(['pdf', 'pix', 'barcode']).optional(),
   attachmentValue: z.string().optional(),
 });
@@ -56,7 +58,7 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
       amount: bill?.amount || 0,
       dueDate: bill?.dueDate ? new Date(bill.dueDate) : new Date(),
       type: bill?.type || 'expense',
-      category: bill?.category || '',
+      category: bill?.category || null,
       attachmentType: bill?.attachmentType || undefined,
       attachmentValue: bill?.attachmentValue || '',
     },
@@ -65,6 +67,8 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
   const attachmentTypeSelected = form.watch('attachmentType');
   const billTypeSelected = form.watch('type');
 
+  const currentCategoryList = billTypeSelected === 'expense' ? expenseCategories : incomeCategories;
+
   function onSubmit(data: BillFormValues) {
     onSave(data);
     const actionText = bill ? (billTypeSelected === 'expense' ? 'Despesa Atualizada!' : 'Receita Atualizada!') : (billTypeSelected === 'expense' ? 'Despesa Adicionada!' : 'Receita Adicionada!');
@@ -72,7 +76,7 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
       title: actionText,
       description: `${billTypeSelected === 'expense' ? 'A despesa' : 'A receita'} para ${data.payeeName} foi salva.`,
     });
-    form.reset({dueDate: new Date(), type: 'expense', amount: 0, payeeName: '', category: ''}); // Reset with defaults
+    form.reset({dueDate: new Date(), type: 'expense', amount: 0, payeeName: '', category: null});
   }
 
   return (
@@ -84,7 +88,13 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Tipo</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <Select 
+                onValueChange={(value) => {
+                  field.onChange(value);
+                  form.setValue('category', null); // Reset category when type changes
+                }} 
+                defaultValue={field.value}
+              >
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o tipo" />
@@ -172,12 +182,21 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Categoria (Opcional)</FormLabel>
-              <FormControl>
-                <div className="relative">
-                   <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                   <Input placeholder="Ex: Alimentação, Transporte, Salário" {...field} className="pl-10" />
-                </div>
-              </FormControl>
+                <Select onValueChange={field.onChange} value={field.value || ""}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione uma categoria" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="">Nenhuma</SelectItem>
+                  {currentCategoryList.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <FormDescription>
                 Agrupe suas transações por categoria.
               </FormDescription>

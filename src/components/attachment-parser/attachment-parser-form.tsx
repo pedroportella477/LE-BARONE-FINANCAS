@@ -15,6 +15,7 @@ import { attachmentParser } from '@/ai/flows/attachment-parser';
 import type { AttachmentParserOutput } from '@/ai/flows/attachment-parser';
 import { useToast } from '@/hooks/use-toast';
 import { addBill } from '@/lib/store';
+import { defaultCategoryForAttachment } from '@/lib/categories';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ACCEPTED_FILE_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
@@ -34,9 +35,10 @@ type AttachmentParserFormValues = z.infer<typeof formSchema>;
 const determineAttachmentTypeFromDetails = (details?: string): 'pdf' | 'pix' | 'barcode' | undefined => {
   if (!details) return undefined;
   const trimmedDetails = details.trim();
-  if (trimmedDetails.toLowerCase().includes('.pdf') || trimmedDetails.includes('/')) return 'pdf';
-  if (/^\d{40,}$/.test(trimmedDetails)) return 'barcode'; // Common barcode lengths are 40+ (e.g. Boleto 44 or 47/48 digits)
-  if (trimmedDetails.length > 0) return 'pix'; // Default to PIX if details exist and aren't clearly PDF/barcode
+  // Looser PDF check, can be a filename or a path-like string
+  if (trimmedDetails.toLowerCase().includes('.pdf') || (trimmedDetails.includes('/') && !trimmedDetails.startsWith('http'))) return 'pdf';
+  if (/^\d{40,}$/.test(trimmedDetails)) return 'barcode'; // Common barcode lengths are 40+
+  if (trimmedDetails.length > 0 && !trimmedDetails.startsWith('http')) return 'pix'; // Default to PIX if details exist, aren't clearly PDF/barcode, and not a URL
   return undefined;
 };
 
@@ -122,16 +124,17 @@ export function AttachmentParserForm() {
         payeeName: extractedData.payeeName,
         amount: extractedData.amount,
         dueDate: extractedData.dueDate, 
-        type: 'expense', // Attachments are assumed to be expenses for now
-        category: 'Anexo Importado', // Default category for imported attachments
+        type: 'expense', 
+        category: defaultCategoryForAttachment, 
         attachmentType: billAttachmentType,
         attachmentValue: extractedData.paymentDetails,
       });
       toast({
         title: 'Despesa Adicionada!',
-        description: `Despesa para ${extractedData.payeeName} adicionada a partir da extração.`,
+        description: `Despesa para ${extractedData.payeeName} adicionada com a categoria '${defaultCategoryForAttachment}'.`,
       });
       setExtractedData(null); 
+      form.reset(); // Reset the form as well
     } catch (error) {
       toast({
         title: 'Erro ao Adicionar Despesa',
@@ -151,7 +154,7 @@ export function AttachmentParserForm() {
           Analisador de Anexos (Beta)
         </CardTitle>
         <CardDescription>
-          Envie um PDF de boleto ou imagem de QR Code/código de barras PIX para extrair os detalhes automaticamente. A transação será adicionada como uma despesa com a categoria "Anexo Importado".
+          Envie um PDF de boleto ou imagem de QR Code/código de barras PIX para extrair os detalhes. A transação será adicionada como uma despesa com a categoria padrão "{defaultCategoryForAttachment}".
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -172,7 +175,7 @@ export function AttachmentParserForm() {
             )}
           </div>
 
-          <Button type="submit" disabled={isLoading} className="w-full">
+          <Button type="submit" disabled={isLoading || !form.formState.isValid} className="w-full">
             {isLoading ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
@@ -201,7 +204,7 @@ export function AttachmentParserForm() {
             <CardContent className="space-y-3 text-sm">
               <p><strong>Beneficiário:</strong> {extractedData.payeeName}</p>
               <p><strong>Valor:</strong> {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(extractedData.amount)}</p>
-              <p><strong>Vencimento:</strong> {new Date(extractedData.dueDate + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+              <p><strong>Vencimento:</strong> {new Date(extractedData.dueDate + 'T00:00:00').toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</p>
               {extractedData.paymentDetails && (
                 <div className="flex items-center justify-between">
                   <p className="truncate pr-2"><strong>Detalhes Pag.:</strong> {extractedData.paymentDetails}</p>
