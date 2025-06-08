@@ -48,6 +48,8 @@ interface BillFormProps {
   onCancel?: () => void;
 }
 
+const NO_CATEGORY_VALUE = "__NO_CATEGORY_SELECTED__"; // Special value for "Nenhuma" option
+
 export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
   const { toast } = useToast();
 
@@ -58,7 +60,7 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
       amount: bill?.amount || 0,
       dueDate: bill?.dueDate ? new Date(bill.dueDate) : new Date(),
       type: bill?.type || 'expense',
-      category: bill?.category || null,
+      category: bill?.category === undefined ? null : bill.category, // Ensure category is null if undefined
       attachmentType: bill?.attachmentType || undefined,
       attachmentValue: bill?.attachmentValue || '',
     },
@@ -70,7 +72,6 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
   const currentCategoryList = billTypeSelected === 'expense' ? expenseCategories : incomeCategories;
 
   function onSubmit(data: BillFormValues) {
-    // data.category here will be string | null due to onValueChange mapping
     onSave(data);
     const actionText = bill ? (billTypeSelected === 'expense' ? 'Despesa Atualizada!' : 'Receita Atualizada!') : (billTypeSelected === 'expense' ? 'Despesa Adicionada!' : 'Receita Adicionada!');
     toast({
@@ -89,11 +90,11 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Tipo</FormLabel>
-              <Select 
+              <Select
                 onValueChange={(value) => {
                   field.onChange(value);
-                  form.setValue('category', null, { shouldValidate: true }); 
-                }} 
+                  form.setValue('category', null, { shouldValidate: true });
+                }}
                 defaultValue={field.value}
               >
                 <FormControl>
@@ -180,12 +181,12 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
         <FormField
           control={form.control}
           name="category"
-          render={({ field }) => ( // field.value is string | null
+          render={({ field }) => (
             <FormItem>
               <FormLabel>Categoria (Opcional)</FormLabel>
-                <Select 
-                  onValueChange={(value) => field.onChange(value === "" ? null : value)} // Pass null to form state if "Nenhuma" (value="") is selected
-                  value={field.value ?? ""} // If form state is null, Select gets value "", corresponding to "Nenhuma"
+                <Select
+                  onValueChange={(value) => field.onChange(value === NO_CATEGORY_VALUE ? null : value)}
+                  value={field.value === null || field.value === undefined ? NO_CATEGORY_VALUE : field.value}
                 >
                 <FormControl>
                   <SelectTrigger>
@@ -193,7 +194,7 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="">Nenhuma</SelectItem>
+                  <SelectItem value={NO_CATEGORY_VALUE}>Nenhuma</SelectItem>
                   {currentCategoryList.map((category) => (
                     <SelectItem key={category} value={category}>
                       {category}
@@ -266,7 +267,7 @@ export function BillForm({ bill, onSave, onCancel }: BillFormProps) {
                 )}
               />
             )}
-            
+
             {attachmentTypeSelected === 'pdf' && (
               <FormField
                 control={form.control}
