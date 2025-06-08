@@ -2,7 +2,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import Link from 'next/link';
-import { Home, User, Combine, FileText, Settings, PanelLeft, Repeat, AreaChart, PiggyBank } from 'lucide-react'; // Added PiggyBank
+import { Home, User, Combine, FileText, Settings, PanelLeft, Repeat, AreaChart, PiggyBank, Target } from 'lucide-react'; // Added PiggyBank, Target
 
 import './globals.css';
 import { cn } from '@/lib/utils';
@@ -60,7 +60,8 @@ const AppSidebarNavigation = () => {
     { href: '/', icon: Home, label: 'Dashboard' },
     { href: '/bills', icon: Combine, label: 'Transações' },
     { href: '/recurring-transactions', icon: Repeat, label: 'Recorrentes' },
-    { href: '/budgets', icon: PiggyBank, label: 'Orçamentos' }, // Added Budgets link
+    { href: '/budgets', icon: PiggyBank, label: 'Orçamentos' },
+    { href: '/financial-goals', icon: Target, label: 'Metas Financeiras' },
     { href: '/reports/monthly', icon: AreaChart, label: 'Relatórios' },
     { href: '/attachment-parser', icon: FileText, label: 'Analisar Anexo' },
     { href: '/profile', icon: User, label: 'Perfil' },

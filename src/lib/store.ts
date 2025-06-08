@@ -1,5 +1,5 @@
 
-import type { UserProfile, Bill, RecurringBill, RecurrenceFrequency, Budget } from '@/types';
+import type { UserProfile, Bill, RecurringBill, RecurrenceFrequency, Budget, FinancialGoal } from '@/types';
 import { defaultExpenseCategories, defaultIncomeCategories, defaultCategoryForAttachment } from './categories';
 import { addDays, addWeeks, addMonths, addYears, formatISO, parseISO, isBefore, isEqual, startOfDay } from 'date-fns';
 
@@ -9,6 +9,7 @@ const EXPENSE_CATEGORIES_KEY = 'lebaroneFinancasExpenseCategories';
 const INCOME_CATEGORIES_KEY = 'lebaroneFinancasIncomeCategories';
 const RECURRING_BILLS_KEY = 'lebaroneFinancasRecurringBills';
 const BUDGETS_KEY = 'lebaroneFinancasBudgets';
+const FINANCIAL_GOALS_KEY = 'lebaroneFinancasFinancialGoals';
 
 // --- User Profile ---
 export const getUserProfile = (): UserProfile | null => {
@@ -422,4 +423,57 @@ export const deleteBudget = (budgetId: string): void => {
   let budgets = getBudgets();
   budgets = budgets.filter(b => b.id !== budgetId);
   saveBudgets(budgets);
+};
+
+// --- Financial Goals ---
+export const getFinancialGoals = (): FinancialGoal[] => {
+  if (typeof window === 'undefined') return [];
+  const storedGoals = localStorage.getItem(FINANCIAL_GOALS_KEY);
+  if (!storedGoals) return [];
+  try {
+    const parsed = JSON.parse(storedGoals) as FinancialGoal[];
+    return parsed.map(goal => ({
+      id: goal.id || Date.now().toString(),
+      name: goal.name || 'Meta Sem Nome',
+      targetAmount: Number(goal.targetAmount) || 0,
+      currentAmount: Number(goal.currentAmount) || 0,
+      targetDate: goal.targetDate || null,
+      icon: goal.icon || undefined,
+      createdAt: goal.createdAt || new Date().toISOString(),
+    }));
+  } catch (error) {
+    console.error("Error parsing financial goals from localStorage:", error);
+    localStorage.removeItem(FINANCIAL_GOALS_KEY);
+    return [];
+  }
+};
+
+export const saveFinancialGoals = (goals: FinancialGoal[]): void => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(FINANCIAL_GOALS_KEY, JSON.stringify(goals));
+};
+
+export const addFinancialGoal = (goalData: Omit<FinancialGoal, 'id' | 'createdAt'>): FinancialGoal => {
+  const goals = getFinancialGoals();
+  const newGoal: FinancialGoal = {
+    ...goalData,
+    id: Date.now().toString() + Math.random().toString().slice(2, 8),
+    createdAt: new Date().toISOString(),
+    currentAmount: goalData.currentAmount || 0, // Ensure currentAmount has a default
+  };
+  const updatedGoals = [...goals, newGoal];
+  saveFinancialGoals(updatedGoals);
+  return newGoal;
+};
+
+export const updateFinancialGoal = (updatedGoalData: FinancialGoal): void => {
+  let goals = getFinancialGoals();
+  goals = goals.map(goal => (goal.id === updatedGoalData.id ? { ...goal, ...updatedGoalData } : goal));
+  saveFinancialGoals(goals);
+};
+
+export const deleteFinancialGoal = (goalId: string): void => {
+  let goals = getFinancialGoals();
+  goals = goals.filter(goal => goal.id !== goalId);
+  saveFinancialGoals(goals);
 };

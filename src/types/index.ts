@@ -57,3 +57,13 @@ export interface Budget {
   limit: number;
   createdAt: string; // ISO string date
 }
+
+export interface FinancialGoal {
+  id: string;
+  name: string;
+  targetAmount: number;
+  currentAmount: number;
+  targetDate?: string | null; // ISO string date YYYY-MM-DD
+  icon?: string; // Name of a lucide-react icon
+  createdAt: string; // ISO string date
+}
