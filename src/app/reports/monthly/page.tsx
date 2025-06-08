@@ -12,6 +12,8 @@ import type { Bill, Budget } from '@/types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, LabelList } from 'recharts';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
 
 interface CategoryData {
   name: string;
@@ -61,10 +63,12 @@ export default function MonthlyReportPage() {
   const [expensesByCategoryChartData, setExpensesByCategoryChartData] = useState<CategoryData[]>([]);
   const [incomeByCategoryChartData, setIncomeByCategoryChartData] = useState<CategoryData[]>([]);
   const [budgetStatusList, setBudgetStatusList] = useState<BudgetStatus[]>([]);
+  const [allDefinedBudgets, setAllDefinedBudgets] = useState<Budget[]>([]); // State for all defined budgets
 
   useEffect(() => {
     const allBills = getBills();
-    const allBudgets = getBudgets();
+    const fetchedBudgets = getBudgets(); // Fetch budgets
+    setAllDefinedBudgets(fetchedBudgets); // Set to state
 
     const filteredBills = allBills.filter(bill => {
       if (!bill.isPaid || !bill.paymentDate) return false;
@@ -108,7 +112,7 @@ export default function MonthlyReportPage() {
 
     // Budget Status
     const statusList: BudgetStatus[] = [];
-    allBudgets.forEach(budget => {
+    fetchedBudgets.forEach(budget => { // Use fetchedBudgets here
       const spentInMonth = filteredBills
         .filter(bill => bill.type === 'expense' && bill.category === budget.category)
         .reduce((sum, bill) => sum + bill.amount, 0);
@@ -261,7 +265,7 @@ export default function MonthlyReportPage() {
             Progresso dos Orçamentos ({months.find(m => m.value === selectedMonth)?.label} de {selectedYear})
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {budgetStatusList.map(({ budget, spent, percentage, remaining }) => (
+            {budgetStatusList.map(({ budget, spent }) => ( // Removed unused percentage and remaining from destructuring
                <BudgetProgressCard
                 key={budget.id}
                 budget={budget}
@@ -271,7 +275,7 @@ export default function MonthlyReportPage() {
           </div>
         </section>
       )}
-      {budgetStatusList.length === 0 && allBudgets.length > 0 && (
+      {budgetStatusList.length === 0 && allDefinedBudgets.length > 0 && ( // Use allDefinedBudgets here
          <section className="mt-10">
           <Separator className="my-6" />
           <h2 className="text-2xl font-semibold tracking-tight text-center mb-6 flex items-center justify-center">
