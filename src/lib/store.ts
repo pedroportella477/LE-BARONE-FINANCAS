@@ -1,10 +1,13 @@
 
 import type { UserProfile, Bill } from '@/types';
+import { defaultExpenseCategories, defaultIncomeCategories, defaultCategoryForAttachment } from './categories';
 
 const USER_PROFILE_KEY = 'lebaroneFinancasUserProfile';
 const BILLS_KEY = 'lebaroneFinancasBills';
+const EXPENSE_CATEGORIES_KEY = 'lebaroneFinancasExpenseCategories';
+const INCOME_CATEGORIES_KEY = 'lebaroneFinancasIncomeCategories';
 
-// User Profile
+// --- User Profile ---
 export const getUserProfile = (): UserProfile | null => {
   if (typeof window === 'undefined') return null;
   const profile = localStorage.getItem(USER_PROFILE_KEY);
@@ -16,7 +19,71 @@ export const saveUserProfile = (profile: UserProfile): void => {
   localStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profile));
 };
 
-// Bills
+// --- Categories ---
+const initializeCategories = (key: string, defaultCategories: string[], specialDefault?: string): string[] => {
+  if (typeof window === 'undefined') return [...defaultCategories];
+  const stored = localStorage.getItem(key);
+  if (stored) {
+    return JSON.parse(stored);
+  }
+  let initialCategories = [...defaultCategories];
+  if (specialDefault && !initialCategories.includes(specialDefault)) {
+    initialCategories.push(specialDefault);
+  }
+  localStorage.setItem(key, JSON.stringify(initialCategories));
+  return initialCategories;
+};
+
+export const getExpenseCategories = (): string[] => {
+  return initializeCategories(EXPENSE_CATEGORIES_KEY, defaultExpenseCategories, defaultCategoryForAttachment);
+};
+
+export const getIncomeCategories = (): string[] => {
+  return initializeCategories(INCOME_CATEGORIES_KEY, defaultIncomeCategories);
+};
+
+const saveCategories = (key: string, categories: string[]): void => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(key, JSON.stringify(categories));
+};
+
+export const addExpenseCategory = (category: string): string[] => {
+  const categories = getExpenseCategories();
+  if (!categories.includes(category) && category.trim() !== '') {
+    const newCategories = [...categories, category.trim()];
+    saveCategories(EXPENSE_CATEGORIES_KEY, newCategories);
+    return newCategories;
+  }
+  return categories;
+};
+
+export const addIncomeCategory = (category: string): string[] => {
+  const categories = getIncomeCategories();
+  if (!categories.includes(category) && category.trim() !== '') {
+    const newCategories = [...categories, category.trim()];
+    saveCategories(INCOME_CATEGORIES_KEY, newCategories);
+    return newCategories;
+  }
+  return categories;
+};
+
+export const deleteExpenseCategory = (categoryToDelete: string): string[] => {
+  let categories = getExpenseCategories();
+  categories = categories.filter(category => category !== categoryToDelete);
+  saveCategories(EXPENSE_CATEGORIES_KEY, categories);
+  // Also update bills that might use this category? For now, no. Bill keeps the string.
+  return categories;
+};
+
+export const deleteIncomeCategory = (categoryToDelete: string): string[] => {
+  let categories = getIncomeCategories();
+  categories = categories.filter(category => category !== categoryToDelete);
+  saveCategories(INCOME_CATEGORIES_KEY, categories);
+  return categories;
+};
+
+
+// --- Bills ---
 export const getBills = (): Bill[] => {
   if (typeof window === 'undefined') return [];
   const storedBills = localStorage.getItem(BILLS_KEY);
@@ -33,11 +100,10 @@ export const getBills = (): Bill[] => {
       let categoryToSet: string | null = null;
       if (bill.category && typeof bill.category === 'string' && bill.category.trim() !== '') {
         categoryToSet = bill.category;
-      } else if (bill.category === null) { // Explicitly keep null if it was stored as null
+      } else if (bill.category === null) { 
         categoryToSet = null;
       }
-      // Any other case (undefined, empty string, wrong type) defaults to null implicitly via initialization
-
+      
       return { 
         id: String(bill.id || Date.now().toString() + Math.random().toString()),
         payeeName: String(bill.payeeName || 'N/A'),
@@ -55,7 +121,7 @@ export const getBills = (): Bill[] => {
     }).filter(bill => bill.id && bill.payeeName && bill.dueDate && bill.createdAt);
   } catch (error) {
     console.error("Error parsing bills from localStorage:", error);
-    localStorage.removeItem(BILLS_KEY); // Clear potentially corrupted data
+    localStorage.removeItem(BILLS_KEY); 
     return []; 
   }
 };
@@ -67,6 +133,12 @@ export const saveBills = (bills: Bill[]): void => {
 
 export const addBill = (billData: Omit<Bill, 'id' | 'createdAt' | 'isPaid'>): Bill => {
   const bills = getBills();
+  
+  // Ensure "Anexo Importado" category exists if used
+  if (billData.type === 'expense' && billData.category === defaultCategoryForAttachment) {
+    addExpenseCategory(defaultCategoryForAttachment);
+  }
+
   const newBill: Bill = {
     id: Date.now().toString(),
     createdAt: new Date().toISOString(),
@@ -75,7 +147,7 @@ export const addBill = (billData: Omit<Bill, 'id' | 'createdAt' | 'isPaid'>): Bi
     amount: billData.amount,
     dueDate: billData.dueDate,
     type: billData.type,
-    category: billData.category || null, // category from form is string | null
+    category: billData.category || null,
     attachmentType: billData.attachmentType,
     attachmentValue: billData.attachmentValue,
   };
@@ -88,7 +160,7 @@ export const addBill = (billData: Omit<Bill, 'id' | 'createdAt' | 'isPaid'>): Bi
 export const updateBill = (updatedBillData: Bill): void => {
   let bills = getBills();
   bills = bills.map(bill => (bill.id === updatedBillData.id ? { 
-    ...bill, // Preserve existing fields not being updated
+    ...bill, 
     ...updatedBillData, 
     category: updatedBillData.category || null, 
   } : bill));

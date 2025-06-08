@@ -1,5 +1,6 @@
 
-export const expenseCategories: string[] = [
+
+export const defaultExpenseCategories: string[] = [
   "Moradia",
   "Transporte",
   "Alimentação",
@@ -15,7 +16,7 @@ export const expenseCategories: string[] = [
   "Outras Despesas",
 ];
 
-export const incomeCategories: string[] = [
+export const defaultIncomeCategories: string[] = [
   "Salário",
   "Freelance/Serviços",
   "Vendas",
