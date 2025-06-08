@@ -154,7 +154,7 @@ export function AttachmentParserForm() {
           Analisador de Anexos (Beta)
         </CardTitle>
         <CardDescription>
-          Envie um arquivo PDF, ou uma imagem (JPG, PNG, WEBP) de um boleto, QR Code PIX ou código de barras. Os detalhes serão extraídos e a transação será adicionada como uma despesa na categoria '{defaultCategoryForAttachment}'.
+          Envie um arquivo PDF (boleto), ou uma imagem (JPG, PNG, WEBP) de um boleto, QR Code PIX ou código de barras. A IA tentará extrair os detalhes, incluindo a chave PIX de um QR Code. A transação será adicionada como uma despesa na categoria '{defaultCategoryForAttachment}'.
         </CardDescription>
       </CardHeader>
       <CardContent>
