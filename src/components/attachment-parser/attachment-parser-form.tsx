@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { UploadCloud, Loader2, CheckCircle, AlertTriangle, PlusSquare } from 'lucide-react';
+import { UploadCloud, Loader2, CheckCircle, AlertTriangle, PlusSquare, ClipboardCopy } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +30,16 @@ const formSchema = z.object({
 });
 
 type AttachmentParserFormValues = z.infer<typeof formSchema>;
+
+const determineAttachmentTypeFromDetails = (details?: string): 'pdf' | 'pix' | 'barcode' | undefined => {
+  if (!details) return undefined;
+  const trimmedDetails = details.trim();
+  if (trimmedDetails.toLowerCase().includes('.pdf') || trimmedDetails.includes('/')) return 'pdf';
+  if (/^\d{40,}$/.test(trimmedDetails)) return 'barcode'; // Common barcode lengths are 40+ (e.g. Boleto 44 or 47/48 digits)
+  if (trimmedDetails.length > 0) return 'pix'; // Default to PIX if details exist and aren't clearly PDF/barcode
+  return undefined;
+};
+
 
 export function AttachmentParserForm() {
   const [isLoading, setIsLoading] = useState(false);
@@ -78,15 +89,41 @@ export function AttachmentParserForm() {
     }
   };
 
+  const handleCopyPix = async (pixCode: string) => {
+    if (!navigator.clipboard) {
+      toast({
+        title: 'Erro ao Copiar',
+        description: 'Seu navegador não suporta a cópia para a área de transferência.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(pixCode);
+      toast({
+        title: 'PIX Copiado!',
+        description: 'O código PIX foi copiado para a área de transferência.',
+      });
+    } catch (err) {
+      console.error('Failed to copy PIX code: ', err);
+      toast({
+        title: 'Erro ao Copiar',
+        description: 'Não foi possível copiar o código PIX.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleAddBillFromExtraction = () => {
     if (!extractedData) return;
     try {
+      const billAttachmentType = determineAttachmentTypeFromDetails(extractedData.paymentDetails);
       addBill({
         payeeName: extractedData.payeeName,
         amount: extractedData.amount,
         dueDate: extractedData.dueDate, 
         type: 'expense', // Attachments are assumed to be expenses for now
-        attachmentType: extractedData.paymentDetails?.includes('/') ? 'pdf' : (extractedData.paymentDetails?.match(/^\d+$/) ? 'barcode' : 'pix'),
+        attachmentType: billAttachmentType,
         attachmentValue: extractedData.paymentDetails,
       });
       toast({
@@ -102,6 +139,8 @@ export function AttachmentParserForm() {
       });
     }
   };
+  
+  const displayAttachmentType = extractedData ? determineAttachmentTypeFromDetails(extractedData.paymentDetails) : undefined;
 
   return (
     <Card className="w-full max-w-2xl mx-auto shadow-xl">
@@ -162,7 +201,23 @@ export function AttachmentParserForm() {
               <p><strong>Beneficiário:</strong> {extractedData.payeeName}</p>
               <p><strong>Valor:</strong> {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(extractedData.amount)}</p>
               <p><strong>Vencimento:</strong> {new Date(extractedData.dueDate + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
-              {extractedData.paymentDetails && <p><strong>Detalhes Pag.:</strong> {extractedData.paymentDetails}</p>}
+              {extractedData.paymentDetails && (
+                <div className="flex items-center justify-between">
+                  <p className="truncate pr-2"><strong>Detalhes Pag.:</strong> {extractedData.paymentDetails}</p>
+                  {displayAttachmentType === 'pix' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleCopyPix(extractedData.paymentDetails!)}
+                      className="ml-2 flex-shrink-0"
+                      title="Copiar código PIX"
+                    >
+                      <ClipboardCopy className="mr-2 h-3 w-3" />
+                      Copiar PIX
+                    </Button>
+                  )}
+                </div>
+              )}
             </CardContent>
             <CardFooter>
               <Button onClick={handleAddBillFromExtraction} variant="outline">
