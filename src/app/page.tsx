@@ -3,22 +3,35 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { DollarSign, TrendingUp, TrendingDown, PlusCircle, ListChecks, AlertTriangle, Coins, PackageOpen, BarChart3 } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, PlusCircle, ListChecks, AlertTriangle, Coins, PackageOpen, BarChart3, Target as TargetIcon } from 'lucide-react';
 import { FinancialSummaryCard } from '@/components/dashboard/financial-summary-card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { getBills, getUserProfile } from '@/lib/store';
-import type { UserProfile, Bill } from '@/types';
-import { format } from 'date-fns';
+import { Progress } from '@/components/ui/progress';
+import { getBills, getUserProfile, getFinancialGoals } from '@/lib/store';
+import type { UserProfile, Bill, FinancialGoal } from '@/types';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, LabelList } from 'recharts';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
+import { BudgetProgressCard } from '@/components/dashboard/budget-progress-card'; // Assuming this will be used or was part of a previous step. Keep if still needed.
+import { getBudgets } from '@/lib/store'; // For budgets
+import type { Budget } from '@/types'; // For budgets
+import { getLucideIcon } from '@/components/financial-goals/goal-form';
+import { cn } from '@/lib/utils';
 
 
 interface CategoryExpense {
   name: string;
   total: number;
+}
+
+interface BudgetStatus {
+  budget: Budget;
+  spent: number;
+  percentage: number;
+  remaining: number;
 }
 
 const chartConfig = {
@@ -37,12 +50,17 @@ export default function DashboardPage() {
   const [remainingBalance, setRemainingBalance] = useState(0);
   const [incomeCompromised, setIncomeCompromised] = useState(false);
   const [expensesByCategoryChartData, setExpensesByCategoryChartData] = useState<CategoryExpense[]>([]);
+  const [budgetStatusList, setBudgetStatusList] = useState<BudgetStatus[]>([]);
+  const [dashboardGoals, setDashboardGoals] = useState<FinancialGoal[]>([]);
+
 
   useEffect(() => {
     const profile = getUserProfile();
     setUserProfile(profile);
     const storedBills = getBills();
     setBills(storedBills);
+    const storedBudgets = getBudgets();
+    const storedFinancialGoals = getFinancialGoals();
 
     const currentDate = new Date();
     const currentMonth = currentDate.getMonth();
@@ -64,7 +82,7 @@ export default function DashboardPage() {
     setIncomeReceivedThisMonth(receivedIncome);
 
     const profileMonthlyIncome = profile?.monthlyIncome ?? 0;
-    const effectiveIncomeThisMonth = profileMonthlyIncome + receivedIncome;
+    const effectiveIncomeThisMonth = profileMonthlyIncome + receivedIncome; // Or just profile.monthlyIncome depending on how it's interpreted
     setRemainingBalance(effectiveIncomeThisMonth - pendingExpenses);
 
     if (profile && profile.monthlyIncome > 0) {
@@ -75,7 +93,7 @@ export default function DashboardPage() {
       }
     }
 
-    // Calculate expenses by category for the current month
+    // Calculate expenses by category for the current month (PAID expenses)
     const paidExpensesThisMonth = storedBills.filter(
       (bill) =>
         bill.type === 'expense' &&
@@ -96,8 +114,30 @@ export default function DashboardPage() {
 
     const chartData = Object.entries(groupedExpenses)
       .map(([name, total]) => ({ name, total }))
-      .sort((a, b) => b.total - a.total); // Sort by total descending
+      .sort((a, b) => b.total - a.total);
     setExpensesByCategoryChartData(chartData);
+
+    // Budget Status
+    const statusList: BudgetStatus[] = [];
+    storedBudgets.forEach(budget => {
+      const spentInMonth = paidExpensesThisMonth // Use already filtered paid expenses
+        .filter(bill => bill.category === budget.category)
+        .reduce((sum, bill) => sum + bill.amount, 0);
+      
+      const percentage = budget.limit > 0 ? (spentInMonth / budget.limit) * 100 : 0;
+      const remaining = budget.limit - spentInMonth;
+      statusList.push({ budget, spent: spentInMonth, percentage, remaining });
+    });
+    setBudgetStatusList(statusList.sort((a,b) => (b.spent/b.budget.limit) - (a.spent/a.budget.limit)));
+
+    // Financial Goals for Dashboard
+    const sortedGoalsForDashboard = [...storedFinancialGoals].sort((a, b) => {
+      const aProgress = a.targetAmount > 0 ? (a.currentAmount / a.targetAmount) : 0;
+      const bProgress = b.targetAmount > 0 ? (b.currentAmount / b.targetAmount) : 0;
+      if (aProgress !== bProgress) return bProgress - aProgress; // Higher progress first
+      return parseISO(b.createdAt).getTime() - parseISO(a.createdAt).getTime(); // Newer goals first for tie-breaking
+    });
+    setDashboardGoals(sortedGoalsForDashboard.slice(0, 3)); // Show top 3
 
   }, []);
 
@@ -188,8 +228,8 @@ export default function DashboardPage() {
               <BarChart 
                 accessibilityLayer 
                 data={expensesByCategoryChartData} 
-                margin={{ top: 5, right: 0, left: -20, bottom: 50 }} // Adjusted bottom margin for labels
-                layout="vertical" // Changed to vertical for better category name display
+                margin={{ top: 5, right: 0, left: -20, bottom: 50 }}
+                layout="vertical"
               >
                 <CartesianGrid horizontal={false} strokeDasharray="3 3" />
                 <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `R$${value}`} />
@@ -200,8 +240,8 @@ export default function DashboardPage() {
                     fontSize={12} 
                     tickLine={false} 
                     axisLine={false} 
-                    width={100} // Adjust width based on typical category name length
-                    interval={0} // Show all category labels
+                    width={100}
+                    interval={0}
                 />
                 <RechartsTooltip 
                   cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
@@ -222,6 +262,84 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       )}
+
+      {budgetStatusList.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-2xl font-semibold tracking-tight mb-4 text-primary flex items-center">
+            <ListChecks className="mr-2 h-6 w-6"/> {/* Replaced PiggyBank with ListChecks for variety */}
+            Progresso dos Orçamentos (Mês Atual)
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {budgetStatusList.map(({ budget, spent }) => (
+               <BudgetProgressCard
+                key={budget.id}
+                budget={budget}
+                spentAmount={spent}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+      
+      <div className="mt-8">
+        <h2 className="text-2xl font-semibold tracking-tight mb-4 text-primary flex items-center">
+          <TargetIcon className="mr-2 h-6 w-6"/>
+          Suas Metas Financeiras
+        </h2>
+        {dashboardGoals.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {dashboardGoals.map(goal => {
+              const progressPercentage = goal.targetAmount > 0 ? Math.min((goal.currentAmount / goal.targetAmount) * 100, 100) : 0;
+              const Icon = getLucideIcon(goal.icon) || TargetIcon;
+              let progressIndicatorClassName = 'bg-primary';
+                if (progressPercentage >= 100) {
+                    progressIndicatorClassName = 'bg-green-500';
+                } else if (progressPercentage > 75) {
+                    progressIndicatorClassName = 'bg-sky-500';
+                } else if (progressPercentage > 50) {
+                    progressIndicatorClassName = 'bg-blue-500';
+                } else if (progressPercentage > 25) {
+                    progressIndicatorClassName = 'bg-indigo-500';
+                }
+
+              return (
+                <Card key={goal.id} className="shadow-md hover:shadow-lg transition-shadow">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-5 w-5 text-primary" />
+                        <CardTitle className="text-lg font-medium">{goal.name}</CardTitle>
+                      </div>
+                      <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", progressPercentage >= 100 ? "bg-green-100 text-green-700" : "bg-primary/10 text-primary")}>
+                        {progressPercentage.toFixed(0)}%
+                      </span>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-2">
+                    <Progress value={progressPercentage} indicatorClassName={progressIndicatorClassName} className="h-2 mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(goal.currentAmount)} / {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(goal.targetAmount)}
+                    </p>
+                    {goal.targetDate && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Meta: {format(parseISO(goal.targetDate), 'dd/MM/yyyy', { locale: ptBR })}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-6 border rounded-lg bg-card shadow-sm">
+            <TargetIcon className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
+            <p className="text-muted-foreground">Nenhuma meta financeira definida ainda.</p>
+            <Link href="/financial-goals" passHref>
+              <Button variant="link" className="mt-2 text-primary hover:underline">Criar uma meta</Button>
+            </Link>
+          </div>
+        )}
+      </div>
 
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
@@ -275,4 +393,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
