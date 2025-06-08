@@ -1,15 +1,33 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { DollarSign, TrendingUp, TrendingDown, PlusCircle, ListChecks, AlertTriangle, Coins, PackageOpen } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, PlusCircle, ListChecks, AlertTriangle, Coins, PackageOpen, BarChart3 } from 'lucide-react';
 import { FinancialSummaryCard } from '@/components/dashboard/financial-summary-card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { getBills, getUserProfile } from '@/lib/store';
 import type { UserProfile, Bill } from '@/types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, LabelList } from 'recharts';
+import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
+
+
+interface CategoryExpense {
+  name: string;
+  total: number;
+}
+
+const chartConfig = {
+  total: {
+    label: 'Total Gasto (R$)',
+    color: 'hsl(var(--chart-1))',
+  },
+} satisfies ChartConfig;
+
 
 export default function DashboardPage() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -18,6 +36,7 @@ export default function DashboardPage() {
   const [incomeReceivedThisMonth, setIncomeReceivedThisMonth] = useState(0);
   const [remainingBalance, setRemainingBalance] = useState(0);
   const [incomeCompromised, setIncomeCompromised] = useState(false);
+  const [expensesByCategoryChartData, setExpensesByCategoryChartData] = useState<CategoryExpense[]>([]);
 
   useEffect(() => {
     const profile = getUserProfile();
@@ -55,6 +74,31 @@ export default function DashboardPage() {
         setIncomeCompromised(false);
       }
     }
+
+    // Calculate expenses by category for the current month
+    const paidExpensesThisMonth = storedBills.filter(
+      (bill) =>
+        bill.type === 'expense' &&
+        bill.isPaid &&
+        bill.paymentDate &&
+        new Date(bill.paymentDate).getMonth() === currentMonth &&
+        new Date(bill.paymentDate).getFullYear() === currentYear
+    );
+
+    const groupedExpenses = paidExpensesThisMonth.reduce((acc, bill) => {
+      const category = bill.category || 'Sem Categoria';
+      if (!acc[category]) {
+        acc[category] = 0;
+      }
+      acc[category] += bill.amount;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const chartData = Object.entries(groupedExpenses)
+      .map(([name, total]) => ({ name, total }))
+      .sort((a, b) => b.total - a.total); // Sort by total descending
+    setExpensesByCategoryChartData(chartData);
+
   }, []);
 
   const greeting = userProfile ? `Olá, ${userProfile.name}!` : 'Bem-vindo(a) ao Lebarone Finanças!';
@@ -130,6 +174,56 @@ export default function DashboardPage() {
         />
       </div>
 
+      {expensesByCategoryChartData.length > 0 && (
+        <Card className="shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center text-xl">
+                <BarChart3 className="mr-2 h-5 w-5 text-primary" />
+                Despesas Pagas por Categoria (Mês Atual)
+            </CardTitle>
+            <CardDescription>Distribuição dos seus gastos pagos este mês por categoria.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={chartConfig} className="min-h-[250px] w-full sm:min-h-[300px]">
+              <BarChart 
+                accessibilityLayer 
+                data={expensesByCategoryChartData} 
+                margin={{ top: 5, right: 0, left: -20, bottom: 50 }} // Adjusted bottom margin for labels
+                layout="vertical" // Changed to vertical for better category name display
+              >
+                <CartesianGrid horizontal={false} strokeDasharray="3 3" />
+                <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `R$${value}`} />
+                <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    stroke="hsl(var(--muted-foreground))" 
+                    fontSize={12} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    width={100} // Adjust width based on typical category name length
+                    interval={0} // Show all category labels
+                />
+                <RechartsTooltip 
+                  cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
+                  contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}
+                  formatter={(value: number) => [new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value), "Total"]}
+                />
+                <Bar dataKey="total" fill="var(--color-total)" radius={[0, 4, 4, 0]} barSize={20}>
+                   <LabelList 
+                    dataKey="total" 
+                    position="right" 
+                    formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value)} 
+                    fontSize={10}
+                    fill="hsl(var(--foreground))"
+                  />
+                </Bar>
+              </BarChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+      )}
+
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight mb-4 text-destructive flex items-center">
@@ -181,3 +275,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
