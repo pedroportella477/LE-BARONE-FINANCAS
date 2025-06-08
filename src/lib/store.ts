@@ -1,7 +1,7 @@
 
 import type { UserProfile, Bill, RecurringBill, RecurrenceFrequency } from '@/types';
 import { defaultExpenseCategories, defaultIncomeCategories, defaultCategoryForAttachment } from './categories';
-import { addDays, addWeeks, addMonths, addYears, formatISO } from 'date-fns';
+import { addDays, addWeeks, addMonths, addYears, formatISO, parseISO, isBefore, isEqual, startOfDay } from 'date-fns';
 
 const USER_PROFILE_KEY = 'lebaroneFinancasUserProfile';
 const BILLS_KEY = 'lebaroneFinancasBills';
@@ -146,7 +146,7 @@ export const addBill = (billData: Omit<Bill, 'id' | 'createdAt' | 'isPaid'>, isI
     isPaid: false,
     payeeName: billData.payeeName,
     amount: billData.amount,
-    dueDate: billData.dueDate,
+    dueDate: billData.dueDate, // Should be YYYY-MM-DD
     type: billData.type,
     category: billData.category || null,
     attachmentType: billData.attachmentType,
@@ -185,7 +185,7 @@ export const markBillAsPaid = (billId: string, paymentDate: string, receiptNotes
   const updatedBill: Bill = {
     ...bills[billIndex],
     isPaid: true,
-    paymentDate: paymentDate,
+    paymentDate: paymentDate, // Should be YYYY-MM-DD
     paymentReceipt: receiptNotes,
   };
   bills[billIndex] = updatedBill;
@@ -196,28 +196,58 @@ export const markBillAsPaid = (billId: string, paymentDate: string, receiptNotes
 // --- Recurring Bills ---
 
 export const calculateNextDueDate = (
-  currentOrStartDate: Date,
+  currentOrStartDateStr: string, // YYYY-MM-DD
   frequency: RecurrenceFrequency,
   interval: number
-): Date => {
+): string => {
+  const currentOrStartDate = parseISO(currentOrStartDateStr);
+  let nextDate: Date;
   switch (frequency) {
     case 'daily':
-      return addDays(currentOrStartDate, interval);
+      nextDate = addDays(currentOrStartDate, interval);
+      break;
     case 'weekly':
-      return addWeeks(currentOrStartDate, interval);
+      nextDate = addWeeks(currentOrStartDate, interval);
+      break;
     case 'monthly':
-      return addMonths(currentOrStartDate, interval);
+      nextDate = addMonths(currentOrStartDate, interval);
+      break;
     case 'yearly':
-      return addYears(currentOrStartDate, interval);
+      nextDate = addYears(currentOrStartDate, interval);
+      break;
     default:
       throw new Error('Invalid recurrence frequency');
   }
+  return formatISO(nextDate, { representation: 'date' });
 };
 
 export const getRecurringBills = (): RecurringBill[] => {
   if (typeof window === 'undefined') return [];
   const storedRecurringBills = localStorage.getItem(RECURRING_BILLS_KEY);
-  return storedRecurringBills ? JSON.parse(storedRecurringBills) : [];
+  if (!storedRecurringBills) return [];
+  try {
+    const parsed = JSON.parse(storedRecurringBills) as RecurringBill[];
+    // Ensure all necessary fields have default or valid values
+    return parsed.map(rb => ({
+      ...rb,
+      id: rb.id || Date.now().toString(),
+      payeeName: rb.payeeName || 'N/A',
+      amount: Number(rb.amount) || 0,
+      type: rb.type || 'expense',
+      frequency: rb.frequency || 'monthly',
+      interval: Number(rb.interval) || 1,
+      startDate: rb.startDate || formatISO(new Date(), { representation: 'date' }),
+      nextDueDate: rb.nextDueDate || rb.startDate || formatISO(new Date(), { representation: 'date' }),
+      createdAt: rb.createdAt || new Date().toISOString(),
+      category: rb.category || null,
+      endDate: rb.endDate || null,
+      lastGeneratedDate: rb.lastGeneratedDate || null,
+    }));
+  } catch (error) {
+    console.error("Error parsing recurring bills from localStorage:", error);
+    localStorage.removeItem(RECURRING_BILLS_KEY);
+    return [];
+  }
 };
 
 export const saveRecurringBills = (recurringBills: RecurringBill[]): void => {
@@ -229,20 +259,13 @@ export const addRecurringBill = (
   data: Omit<RecurringBill, 'id' | 'createdAt' | 'nextDueDate' | 'lastGeneratedDate'>
 ): RecurringBill => {
   const recurringBills = getRecurringBills();
-  const startDate = new Date(data.startDate);
   
-  // The first 'nextDueDate' is simply the startDate if no instances have been generated yet.
-  // Or, if we decide to generate the first instance immediately upon creation,
-  // then nextDueDate should be startDate, and an instance is created for startDate.
-  // For simplicity now, nextDueDate will be the first date an instance *should* be created.
-  const nextDueDate = startDate;
-
   const newRecurringBill: RecurringBill = {
     ...data,
     id: Date.now().toString() + Math.random().toString().slice(2, 8),
     createdAt: new Date().toISOString(),
-    nextDueDate: formatISO(nextDueDate, { representation: 'date' }),
-    lastGeneratedDate: null, // No instances generated yet
+    nextDueDate: data.startDate, // Initial next due date is the start date
+    lastGeneratedDate: null, 
     category: data.category || null,
     endDate: data.endDate || null,
   };
@@ -253,8 +276,16 @@ export const addRecurringBill = (
 
 export const updateRecurringBill = (updatedData: RecurringBill): void => {
   let recurringBills = getRecurringBills();
+  // Ensure nextDueDate is recalculated if startDate, frequency, or interval changes significantly
+  // For simplicity, if editing, we assume nextDueDate might need to be preserved or smartly updated by the form/caller.
+  // However, if `startDate` is changed to be after `nextDueDate`, `nextDueDate` should become `startDate`.
+  let finalData = { ...updatedData };
+  if (parseISO(finalData.startDate) > parseISO(finalData.nextDueDate)) {
+    finalData.nextDueDate = finalData.startDate;
+  }
+
   recurringBills = recurringBills.map(rb =>
-    rb.id === updatedData.id ? { ...rb, ...updatedData, category: updatedData.category || null, endDate: updatedData.endDate || null } : rb
+    rb.id === finalData.id ? { ...rb, ...finalData, category: finalData.category || null, endDate: finalData.endDate || null } : rb
   );
   saveRecurringBills(recurringBills);
 };
@@ -263,5 +294,74 @@ export const deleteRecurringBill = (recurringBillId: string): void => {
   let recurringBills = getRecurringBills();
   recurringBills = recurringBills.filter(rb => rb.id !== recurringBillId);
   saveRecurringBills(recurringBills);
-  // Optionally, also delete generated Bill instances? For now, no.
+};
+
+
+export const processRecurringBills = (): { generatedCount: number, updatedBills: Bill[] } => {
+  if (typeof window === 'undefined') return { generatedCount: 0, updatedBills: getBills() };
+
+  let allBills = getBills();
+  const recurringBills = getRecurringBills();
+  const today = startOfDay(new Date());
+  let generatedCount = 0;
+  const updatedRecurringDefinitions: RecurringBill[] = [];
+
+  recurringBills.forEach(rb => {
+    let currentNextDueDate = parseISO(rb.nextDueDate);
+    const rbStartDate = parseISO(rb.startDate);
+
+    // Ensure nextDueDate is not before startDate
+    if (isBefore(currentNextDueDate, rbStartDate)) {
+      currentNextDueDate = rbStartDate;
+      rb.nextDueDate = formatISO(currentNextDueDate, { representation: 'date' });
+    }
+    
+    let instancesToCreateForThisRb = 0;
+
+    while (
+      (isBefore(currentNextDueDate, today) || isEqual(currentNextDueDate, today)) &&
+      (!rb.endDate || isBefore(currentNextDueDate, parseISO(rb.endDate)) || isEqual(currentNextDueDate, parseISO(rb.endDate)))
+    ) {
+      // Check if an instance for this specific recurring bill and this specific due date already exists
+      const instanceExists = allBills.some(
+        bill => bill.recurringBillId === rb.id && bill.dueDate === formatISO(currentNextDueDate, { representation: 'date' })
+      );
+
+      if (!instanceExists) {
+        const newBillData: Omit<Bill, 'id' | 'createdAt' | 'isPaid'> = {
+          payeeName: rb.payeeName,
+          amount: rb.amount,
+          dueDate: formatISO(currentNextDueDate, { representation: 'date' }),
+          type: rb.type,
+          category: rb.category || null,
+          recurringBillId: rb.id,
+        };
+        const createdBill = addBill(newBillData, true); // Pass true for isInstanceFromRecurring
+        allBills = [...allBills, createdBill]; // Manually update allBills for subsequent checks within this loop
+        generatedCount++;
+        instancesToCreateForThisRb++;
+        rb.lastGeneratedDate = formatISO(currentNextDueDate, { representation: 'date' });
+      }
+      
+      // Calculate the next due date based on the *current* (just processed) due date
+      const nextIterationDueDate = calculateNextDueDate(formatISO(currentNextDueDate, {representation: 'date'}), rb.frequency, rb.interval);
+      currentNextDueDate = parseISO(nextIterationDueDate);
+      rb.nextDueDate = nextIterationDueDate; // Update recurring bill's next due date for saving
+      
+      // Safety break for misconfiguration or very long intervals catching up
+      if (instancesToCreateForThisRb > 100) { // Arbitrary limit
+          console.warn(`Recurring bill ${rb.id} generated over 100 instances in one go. Breaking to prevent infinite loop.`);
+          break;
+      }
+    }
+    updatedRecurringDefinitions.push(rb);
+  });
+
+  if (generatedCount > 0) {
+    saveRecurringBills(updatedRecurringDefinitions);
+    // saveBills(allBills) is called within addBill, but if we modified allBills directly without calling addBill each time, we'd need it here.
+    // Since addBill calls saveBills, it's okay for now.
+  }
+  
+  return { generatedCount, updatedBills: getBills() }; // Return the latest state of bills
 };

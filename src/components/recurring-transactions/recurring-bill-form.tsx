@@ -4,7 +4,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CalendarIcon, TrendingDown, TrendingUp } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
@@ -82,8 +82,8 @@ export function RecurringBillForm({ recurringBill, onSave, onCancel }: Recurring
       category: recurringBill?.category === undefined ? NO_CATEGORY_VALUE : (recurringBill.category || NO_CATEGORY_VALUE),
       frequency: recurringBill?.frequency || 'monthly',
       interval: recurringBill?.interval || 1,
-      startDate: recurringBill?.startDate ? new Date(recurringBill.startDate) : new Date(),
-      endDate: recurringBill?.endDate ? new Date(recurringBill.endDate) : null,
+      startDate: recurringBill?.startDate ? parseISO(recurringBill.startDate) : new Date(),
+      endDate: recurringBill?.endDate ? parseISO(recurringBill.endDate) : null,
     },
   });
 
@@ -93,6 +93,33 @@ export function RecurringBillForm({ recurringBill, onSave, onCancel }: Recurring
     setExpenseCats(getExpenseCategories());
     setIncomeCats(getIncomeCategories());
   }, []);
+
+  useEffect(() => {
+    if (recurringBill) {
+        form.reset({
+            payeeName: recurringBill.payeeName,
+            amount: recurringBill.amount,
+            type: recurringBill.type,
+            category: recurringBill.category || NO_CATEGORY_VALUE,
+            frequency: recurringBill.frequency,
+            interval: recurringBill.interval,
+            startDate: parseISO(recurringBill.startDate),
+            endDate: recurringBill.endDate ? parseISO(recurringBill.endDate) : null,
+        });
+    } else {
+        form.reset({ // Default values for new form
+            payeeName: '',
+            amount: 0,
+            type: 'expense',
+            category: NO_CATEGORY_VALUE,
+            frequency: 'monthly',
+            interval: 1,
+            startDate: new Date(),
+            endDate: null,
+        });
+    }
+  }, [recurringBill, form]);
+
 
   useEffect(() => {
     const currentCategory = form.getValues('category');
@@ -117,7 +144,7 @@ export function RecurringBillForm({ recurringBill, onSave, onCancel }: Recurring
   
   const getIntervalLabel = () => {
     if (!frequencySelected) return "Intervalo";
-    const s = intervalValue > 1 ? "s" : "";
+    // const s = intervalValue > 1 ? "s" : ""; // Not needed as label describes singular
     switch (frequencySelected) {
         case 'daily': return `A cada quantos Dias`;
         case 'weekly': return `A cada quantas Semanas`;

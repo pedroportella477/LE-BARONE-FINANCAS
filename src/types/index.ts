@@ -30,10 +30,10 @@ export interface RecurringBill {
   category?: string | null;
   frequency: RecurrenceFrequency;
   interval: number; // e.g., if frequency is 'monthly' and interval is 2, it means every 2 months
-  startDate: string; // ISO string date
-  endDate?: string | null; // ISO string date, optional
-  nextDueDate: string; // ISO string date, calculated
-  lastGeneratedDate?: string | null; // ISO string date, to track up to when instances were generated
+  startDate: string; // ISO string date (YYYY-MM-DD)
+  endDate?: string | null; // ISO string date (YYYY-MM-DD), optional
+  nextDueDate: string; // ISO string date (YYYY-MM-DD), calculated
+  lastGeneratedDate?: string | null; // ISO string date (YYYY-MM-DD), to track up to when instances were generated
   createdAt: string; // ISO string date
 }
 

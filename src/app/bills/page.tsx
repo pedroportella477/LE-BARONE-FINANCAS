@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -8,7 +9,7 @@ import { BillList } from '@/components/bills/bill-list';
 import { PaymentForm } from '@/components/bills/payment-form';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
-import { getBills, addBill as storeAddBill, updateBill as storeUpdateBill, deleteBill as storeDeleteBill, markBillAsPaid as storeMarkBillAsPaid } from '@/lib/store';
+import { getBills, addBill as storeAddBill, updateBill as storeUpdateBill, deleteBill as storeDeleteBill, markBillAsPaid as storeMarkBillAsPaid, processRecurringBills } from '@/lib/store';
 import type { Bill } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -23,15 +24,30 @@ export default function BillsPage() {
   const isMobile = useIsMobile();
 
   useEffect(() => {
-    setBills(getBills());
+    const { generatedCount, updatedBills } = processRecurringBills();
+    setBills(updatedBills);
+    if (generatedCount > 0) {
+      toast({
+        title: "Transações Recorrentes Geradas",
+        description: `${generatedCount} transação(ões) recorrente(s) foram adicionadas automaticamente.`,
+      });
+    }
     
     if (typeof window !== "undefined" && window.location.hash === "#add-bill") {
       setIsBillFormOpen(true);
     }
-  }, []);
+  }, [toast]); // Added toast to dependency array
 
   const refreshBills = () => {
-    setBills(getBills());
+    // Process recurring bills again when refreshing, in case some became due
+    const { generatedCount, updatedBills } = processRecurringBills();
+    setBills(updatedBills);
+     if (generatedCount > 0) {
+      toast({
+        title: "Transações Recorrentes Geradas",
+        description: `${generatedCount} transação(ões) recorrente(s) foram adicionadas automaticamente.`,
+      });
+    }
   };
 
   const handleSaveBill = (billData: BillFormValues, attachmentFile?: File) => {
@@ -39,7 +55,7 @@ export default function BillsPage() {
       const updatedBill: Bill = {
         ...selectedBill,
         ...billData,
-        dueDate: billData.dueDate.toISOString(),
+        dueDate: billData.dueDate.toISOString().split('T')[0],
         category: billData.category || undefined,
       };
       storeUpdateBill(updatedBill);
@@ -48,7 +64,7 @@ export default function BillsPage() {
       const newBillData: Omit<Bill, 'id' | 'createdAt' | 'isPaid'> = {
         payeeName: billData.payeeName,
         amount: billData.amount,
-        dueDate: billData.dueDate.toISOString(),
+        dueDate: billData.dueDate.toISOString().split('T')[0],
         type: billData.type,
         category: billData.category || undefined,
         attachmentType: billData.attachmentType,
@@ -113,13 +129,13 @@ export default function BillsPage() {
           if (!open) setSelectedBill(null);
         }}>
         <FormDialogContentComponent side={isMobile ? 'bottom' : undefined} className={isMobile ? "h-[90vh] overflow-y-auto" : "sm:max-w-lg"}>
-          <DialogHeader>
+          <DialogHeader className={isMobile ? "p-4" : ""}>
             <DialogTitle>{selectedBill ? (selectedBill.type === 'expense' ? 'Editar Despesa' : 'Editar Receita') : 'Adicionar Nova Transação'}</DialogTitle>
             <DialogDescription>
               {selectedBill ? `Modifique os detalhes da ${selectedBill.type === 'expense' ? 'despesa' : 'receita'} selecionada.` : 'Preencha os detalhes da nova despesa ou receita.'}
             </DialogDescription>
           </DialogHeader>
-          <div className={isMobile ? "p-4" : "py-4"}>
+          <div className={isMobile ? "p-4 pt-0" : "py-4"}>
             <BillForm
               bill={selectedBill}
               onSave={handleSaveBill}
@@ -135,7 +151,7 @@ export default function BillsPage() {
             if (!open) setSelectedBill(null);
           }}>
           <FormDialogContentComponent side={isMobile ? 'bottom' : undefined} className={isMobile ? "h-auto" : "sm:max-w-md"}>
-             <DialogHeader>
+             <DialogHeader className={isMobile ? "p-4" : ""}>
                 <DialogTitle>{selectedBill.type === 'expense' ? 'Registrar Pagamento' : 'Registrar Recebimento'}</DialogTitle>
                 <DialogDescription>
                   {selectedBill.type === 'expense' 
@@ -143,7 +159,7 @@ export default function BillsPage() {
                     : `Confirme os detalhes do recebimento de ${selectedBill.payeeName}.`}
                 </DialogDescription>
              </DialogHeader>
-             <div className={isMobile ? "p-4" : "py-4"}>
+             <div className={isMobile ? "p-4 pt-0" : "py-4"}>
               <PaymentForm
                 bill={selectedBill}
                 onSave={handleSavePayment}
