@@ -112,8 +112,8 @@ export function RecurringBillList({ recurringBills, onEdit, onDelete }: Recurrin
                         </div>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Próxima data em que uma transação individual será considerada.</p>
-                        <p>(A geração automática ainda será implementada)</p>
+                        <p>Próxima data em que uma transação será considerada para geração automática.</p>
+                        <p>A geração ocorre ao visitar a página de Transações.</p>
                       </TooltipContent>
                     </Tooltip>
                 </div>
@@ -166,3 +166,4 @@ export function RecurringBillList({ recurringBills, onEdit, onDelete }: Recurrin
     </div>
   );
 }
+

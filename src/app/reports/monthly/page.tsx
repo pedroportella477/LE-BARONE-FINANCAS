@@ -2,12 +2,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BarChart3, CalendarFold, TrendingDown, TrendingUp, DollarSign, Coins } from 'lucide-react';
+import { BarChart3, CalendarFold, TrendingDown, TrendingUp, DollarSign, Coins, PiggyBank } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FinancialSummaryCard } from '@/components/dashboard/financial-summary-card';
-import { getBills } from '@/lib/store';
-import type { Bill } from '@/types';
+import { BudgetProgressCard } from '@/components/dashboard/budget-progress-card';
+import { getBills, getBudgets } from '@/lib/store';
+import type { Bill, Budget } from '@/types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, LabelList } from 'recharts';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { Separator } from '@/components/ui/separator';
@@ -15,6 +16,13 @@ import { Separator } from '@/components/ui/separator';
 interface CategoryData {
   name: string;
   total: number;
+}
+
+interface BudgetStatus {
+  budget: Budget;
+  spent: number;
+  percentage: number;
+  remaining: number;
 }
 
 const chartConfigBase = {
@@ -52,13 +60,15 @@ export default function MonthlyReportPage() {
   const [netBalance, setNetBalance] = useState(0);
   const [expensesByCategoryChartData, setExpensesByCategoryChartData] = useState<CategoryData[]>([]);
   const [incomeByCategoryChartData, setIncomeByCategoryChartData] = useState<CategoryData[]>([]);
+  const [budgetStatusList, setBudgetStatusList] = useState<BudgetStatus[]>([]);
 
   useEffect(() => {
     const allBills = getBills();
+    const allBudgets = getBudgets();
 
     const filteredBills = allBills.filter(bill => {
       if (!bill.isPaid || !bill.paymentDate) return false;
-      const paymentDate = new Date(bill.paymentDate); // Ensure paymentDate includes timezone or is treated as local
+      const paymentDate = new Date(bill.paymentDate); 
       return paymentDate.getMonth() === selectedMonth && paymentDate.getFullYear() === selectedYear;
     });
 
@@ -95,6 +105,20 @@ export default function MonthlyReportPage() {
         return acc;
       }, {} as Record<string, number>);
     setIncomeByCategoryChartData(Object.entries(groupedIncome).map(([name, total]) => ({ name, total })).sort((a,b) => b.total - a.total));
+
+    // Budget Status
+    const statusList: BudgetStatus[] = [];
+    allBudgets.forEach(budget => {
+      const spentInMonth = filteredBills
+        .filter(bill => bill.type === 'expense' && bill.category === budget.category)
+        .reduce((sum, bill) => sum + bill.amount, 0);
+      
+      const percentage = budget.limit > 0 ? (spentInMonth / budget.limit) * 100 : 0;
+      const remaining = budget.limit - spentInMonth;
+      statusList.push({ budget, spent: spentInMonth, percentage, remaining });
+    });
+    setBudgetStatusList(statusList.sort((a,b) => (b.spent/b.budget.limit) - (a.spent/a.budget.limit)));
+
 
   }, [selectedMonth, selectedYear]);
 
@@ -228,6 +252,37 @@ export default function MonthlyReportPage() {
           </CardContent>
         </Card>
       </div>
+
+      {budgetStatusList.length > 0 && (
+        <section className="mt-10">
+          <Separator className="my-6" />
+          <h2 className="text-2xl font-semibold tracking-tight text-center mb-6 flex items-center justify-center">
+            <PiggyBank className="mr-3 h-7 w-7 text-primary" />
+            Progresso dos Orçamentos ({months.find(m => m.value === selectedMonth)?.label} de {selectedYear})
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {budgetStatusList.map(({ budget, spent, percentage, remaining }) => (
+               <BudgetProgressCard
+                key={budget.id}
+                budget={budget}
+                spentAmount={spent}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+      {budgetStatusList.length === 0 && allBudgets.length > 0 && (
+         <section className="mt-10">
+          <Separator className="my-6" />
+          <h2 className="text-2xl font-semibold tracking-tight text-center mb-6 flex items-center justify-center">
+            <PiggyBank className="mr-3 h-7 w-7 text-primary" />
+            Progresso dos Orçamentos ({months.find(m => m.value === selectedMonth)?.label} de {selectedYear})
+          </h2>
+           <p className="text-muted-foreground text-center py-8">Nenhum gasto registrado nas categorias orçadas para este período.</p>
+         </section>
+      )}
+
+
     </div>
   );
 }
