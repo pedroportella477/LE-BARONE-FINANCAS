@@ -131,10 +131,10 @@ export function AttachmentParserForm() {
       });
       toast({
         title: 'Despesa Adicionada!',
-        description: `Despesa para ${extractedData.payeeName} adicionada com a categoria '${defaultCategoryForAttachment}'.`,
+        description: `Despesa para ${extractedData.payeeName} adicionada na categoria '${defaultCategoryForAttachment}'.`,
       });
       setExtractedData(null); 
-      form.reset(); // Reset the form as well
+      form.reset(); 
     } catch (error) {
       toast({
         title: 'Erro ao Adicionar Despesa',
@@ -154,14 +154,14 @@ export function AttachmentParserForm() {
           Analisador de Anexos (Beta)
         </CardTitle>
         <CardDescription>
-          Envie um PDF de boleto ou imagem de QR Code/código de barras PIX para extrair os detalhes. A transação será adicionada como uma despesa com a categoria padrão "{defaultCategoryForAttachment}".
+          Envie um arquivo PDF, ou uma imagem (JPG, PNG, WEBP) de um boleto, QR Code PIX ou código de barras. Os detalhes serão extraídos e a transação será adicionada como uma despesa na categoria '{defaultCategoryForAttachment}'.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <div>
             <label htmlFor="file-upload" className="block text-sm font-medium text-foreground mb-1">
-              Selecione o arquivo
+              Selecione o arquivo (PDF, JPG, PNG, WEBP)
             </label>
             <Input
               id="file-upload"
@@ -235,3 +235,4 @@ export function AttachmentParserForm() {
     </Card>
   );
 }
+
