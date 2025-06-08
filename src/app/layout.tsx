@@ -2,7 +2,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import Link from 'next/link';
-import { Home, User, Combine, FileText, Settings, PanelLeft, Repeat } from 'lucide-react'; // Added Repeat
+import { Home, User, Combine, FileText, Settings, PanelLeft, Repeat, AreaChart } from 'lucide-react'; // Added AreaChart
 
 import './globals.css';
 import { cn } from '@/lib/utils';
@@ -60,6 +60,7 @@ const AppSidebarNavigation = () => {
     { href: '/', icon: Home, label: 'Dashboard' },
     { href: '/bills', icon: Combine, label: 'Transações' },
     { href: '/recurring-transactions', icon: Repeat, label: 'Recorrentes' },
+    { href: '/reports/monthly', icon: AreaChart, label: 'Relatórios' }, // Added Reports link
     { href: '/attachment-parser', icon: FileText, label: 'Analisar Anexo' },
     { href: '/profile', icon: User, label: 'Perfil' },
   ];
