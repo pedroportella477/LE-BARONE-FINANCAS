@@ -4,7 +4,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
   Form,
@@ -18,11 +18,13 @@ import {
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import type { UserProfile } from '@/types';
-import { saveUserProfile } from '@/lib/store';
+import type { UserProfile as UserProfileType } from '@/types'; // Renamed to avoid conflict
+// import { saveUserProfile as saveUserProfileToLocalStore } from '@/lib/store'; // No longer saving directly to local store
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Upload, Trash2 } from 'lucide-react'; // Importar ícones
+import { Upload, Trash2, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/auth-context';
+
 
 const MAX_FILE_SIZE_MB = 2;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
@@ -30,9 +32,7 @@ const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/web
 const RESIZED_IMAGE_DIMENSION = 150; // px
 
 const profileFormSchema = z.object({
-  name: z.string().min(2, {
-    message: 'O nome deve ter pelo menos 2 caracteres.',
-  }),
+  // Name and email will come from Firebase Auth user object, not part of this form's direct state for saving to UserProfile model
   monthlyIncome: z.preprocess(
     (val) => (val === '' ? undefined : Number(val)),
     z.number({ invalid_type_error: 'Renda mensal deve ser um número' }).positive({
@@ -54,12 +54,11 @@ const profileFormSchema = z.object({
     .optional()
     .nullable(),
   photoUrl: z.string().nullable().optional(), // Armazena a Data URL
-  // Campo para o input de arquivo, não será salvo diretamente no profileData
   photoFile: z
     .custom<FileList>()
     .refine(
       (files) => {
-        if (!files || files.length === 0) return true; // Permite não selecionar arquivo
+        if (!files || files.length === 0) return true;
         return files[0].size <= MAX_FILE_SIZE_BYTES;
       },
       `O tamanho máximo da foto é ${MAX_FILE_SIZE_MB}MB.`
@@ -76,56 +75,68 @@ const profileFormSchema = z.object({
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
+// Remove onSave from props, it will be handled by API call
 interface UserProfileFormProps {
-  initialProfile: UserProfile | null;
-  onSave: (profile: UserProfile) => void;
+  // initialProfile: UserProfileType | null; // UserProfileType comes from AuthContext now
 }
 
-export function UserProfileForm({ initialProfile, onSave }: UserProfileFormProps) {
+export function UserProfileForm({ }: UserProfileFormProps) {
   const { toast } = useToast();
-  const [previewImage, setPreviewImage] = useState<string | null>(initialProfile?.photoUrl || null);
+  const { user, dbUser, dbUserProfile, loading: authLoading, refreshDbUser } = useAuth();
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
-      name: initialProfile?.name || '',
-      monthlyIncome: initialProfile?.monthlyIncome || 0,
-      cpf: initialProfile?.cpf || '',
-      cellphone: initialProfile?.cellphone || '',
-      photoUrl: initialProfile?.photoUrl || null,
+      monthlyIncome: 0,
+      cpf: '',
+      cellphone: '',
+      photoUrl: null,
       photoFile: undefined,
     },
   });
+  
+  const userName = user?.displayName || dbUser?.name || "Usuário";
+  const userEmail = user?.email || dbUser?.email || "Email não disponível";
+
 
   useEffect(() => {
-    // Sincronizar previewImage com o valor inicial do formulário, caso initialProfile mude
-    setPreviewImage(initialProfile?.photoUrl || null);
-    form.reset({
-        name: initialProfile?.name || '',
-        monthlyIncome: initialProfile?.monthlyIncome || 0,
-        cpf: initialProfile?.cpf || '',
-        cellphone: initialProfile?.cellphone || '',
-        photoUrl: initialProfile?.photoUrl || null,
+    if (dbUserProfile) {
+      form.reset({
+        monthlyIncome: dbUserProfile.monthlyIncome || 0,
+        cpf: dbUserProfile.cpf || '',
+        cellphone: dbUserProfile.cellphone || '',
+        photoUrl: dbUserProfile.photoUrl || user?.photoURL || null, // Prioritize dbUserProfile.photoUrl
         photoFile: undefined,
-    });
-  }, [initialProfile, form]);
+      });
+      setPreviewImage(dbUserProfile.photoUrl || user?.photoURL || null);
+    } else if (user) { // If dbUserProfile is null but Firebase user exists (e.g. during initial creation)
+       form.reset({
+        monthlyIncome: 0,
+        cpf: '',
+        cellphone: '',
+        photoUrl: user.photoURL || null,
+        photoFile: undefined,
+      });
+      setPreviewImage(user.photoURL || null);
+    }
+  }, [dbUserProfile, user, form]);
 
 
   const handleImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Validar com Zod antes de processar
       const validationResult = await form.trigger('photoFile');
       if (!validationResult || form.formState.errors.photoFile) {
-        setPreviewImage(initialProfile?.photoUrl || null); // Reverte para a imagem anterior ou nenhuma
-        form.setValue('photoFile', undefined); // Limpa o arquivo inválido
+        setPreviewImage(dbUserProfile?.photoUrl || user?.photoURL || null);
+        form.setValue('photoFile', undefined);
         return;
       }
 
       const reader = new FileReader();
       reader.onloadend = () => {
         const originalDataUrl = reader.result as string;
-        
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement('canvas');
@@ -134,7 +145,6 @@ export function UserProfileForm({ initialProfile, onSave }: UserProfileFormProps
             toast({ title: 'Erro ao processar imagem', description: 'Não foi possível obter o contexto do canvas.', variant: 'destructive'});
             return;
           }
-
           let { width, height } = img;
           if (width > height) {
             if (width > RESIZED_IMAGE_DIMENSION) {
@@ -150,21 +160,20 @@ export function UserProfileForm({ initialProfile, onSave }: UserProfileFormProps
           canvas.width = width;
           canvas.height = height;
           ctx.drawImage(img, 0, 0, width, height);
-          
-          const resizedDataUrl = canvas.toDataURL('image/jpeg', 0.9); // Qualidade 0.9
+          const resizedDataUrl = canvas.toDataURL('image/jpeg', 0.9);
           setPreviewImage(resizedDataUrl);
           form.setValue('photoUrl', resizedDataUrl, { shouldValidate: true });
         };
         img.onerror = () => {
-            toast({ title: 'Erro ao carregar imagem', description: 'Não foi possível carregar o arquivo de imagem selecionado.', variant: 'destructive'});
-            setPreviewImage(initialProfile?.photoUrl || null);
-            form.setValue('photoFile', undefined);
+          toast({ title: 'Erro ao carregar imagem', variant: 'destructive'});
+          setPreviewImage(dbUserProfile?.photoUrl || user?.photoURL || null);
+          form.setValue('photoFile', undefined);
         };
         img.src = originalDataUrl;
       };
       reader.onerror = () => {
-        toast({ title: 'Erro ao ler arquivo', description: 'Não foi possível ler o arquivo selecionado.', variant: 'destructive'});
-        setPreviewImage(initialProfile?.photoUrl || null);
+        toast({ title: 'Erro ao ler arquivo', variant: 'destructive'});
+        setPreviewImage(dbUserProfile?.photoUrl || user?.photoURL || null);
         form.setValue('photoFile', undefined);
       };
       reader.readAsDataURL(file);
@@ -174,29 +183,65 @@ export function UserProfileForm({ initialProfile, onSave }: UserProfileFormProps
   const handleRemoveImage = () => {
     setPreviewImage(null);
     form.setValue('photoUrl', null);
-    form.setValue('photoFile', undefined); // Limpa qualquer arquivo selecionado
+    form.setValue('photoFile', undefined);
     const fileInput = document.getElementById('photoFile') as HTMLInputElement;
-    if (fileInput) {
-        fileInput.value = ''; // Reseta o input de arquivo
-    }
+    if (fileInput) fileInput.value = '';
   };
 
   async function onSubmit(data: ProfileFormValues) {
-    const profileData: UserProfile = {
-      name: data.name,
-      monthlyIncome: data.monthlyIncome,
-      cpf: data.cpf || null,
-      cellphone: data.cellphone || null,
-      photoUrl: data.photoUrl, // Já deve ser a Data URL redimensionada ou null
-    };
-    saveUserProfile(profileData);
-    onSave(profileData);
-    toast({
-      title: 'Perfil Salvo!',
-      description: 'Suas informações de perfil foram atualizadas com sucesso.',
-      variant: 'default',
-    });
-    form.setValue('photoFile', undefined); // Limpa o campo photoFile após o envio bem-sucedido
+    if (!user) {
+      toast({ title: "Erro de Autenticação", description: "Usuário não está logado.", variant: "destructive" });
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const token = await user.getIdToken();
+      const payload = {
+        // name: data.name, // Name and email are from Firebase Auth primarily
+        monthlyIncome: data.monthlyIncome,
+        cpf: data.cpf || null,
+        cellphone: data.cellphone || null,
+        photoUrl: data.photoUrl, // This is the potentially new Data URL from previewImage
+      };
+
+      const response = await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Falha ao atualizar perfil.');
+      }
+
+      await refreshDbUser(); // Refresh user data in AuthContext
+      toast({
+        title: 'Perfil Salvo!',
+        description: 'Suas informações de perfil foram atualizadas.',
+        variant: 'default',
+      });
+      form.setValue('photoFile', undefined);
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao Salvar Perfil',
+        description: error.message || 'Ocorreu um problema ao salvar suas informações.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+  
+  if (authLoading) {
+    return (
+      <Card className="w-full max-w-2xl mx-auto shadow-xl flex justify-center items-center p-10">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </Card>
+    );
   }
 
   return (
@@ -209,32 +254,31 @@ export function UserProfileForm({ initialProfile, onSave }: UserProfileFormProps
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
             <div className="flex flex-col md:flex-row-reverse md:gap-8 items-start">
-              {/* Coluna do Avatar (à direita em desktop, acima em mobile pela classe flex-col md:flex-row-reverse) */}
               <div className="w-full md:w-auto md:max-w-[200px] flex flex-col items-center space-y-3 mb-6 md:mb-0 md:pt-8">
                 <Avatar className="h-36 w-36 text-4xl border-2 border-primary/20 shadow-md">
-                  <AvatarImage src={previewImage || undefined} alt={form.getValues('name')} />
+                  <AvatarImage src={previewImage || undefined} alt={userName} />
                   <AvatarFallback>
-                    {form.getValues('name')?.substring(0, 2).toUpperCase() || 'P'}
+                    {userName?.substring(0, 2).toUpperCase() || 'P'}
                   </AvatarFallback>
                 </Avatar>
-                {/* O input real está escondido, o label age como botão */}
                 <FormField
                   control={form.control}
                   name="photoFile"
-                  render={({ field }) => ( // field não é usado diretamente aqui, mas é necessário para o hook form
+                  render={() => (
                     <FormItem className="w-full">
                       <FormControl>
                         <Input
-                          id="photoFile" // ID para o label
+                          id="photoFile"
                           type="file"
                           accept={ACCEPTED_IMAGE_TYPES.join(',')}
                           onChange={handleImageChange}
                           className="hidden"
+                          disabled={isSubmitting}
                         />
                       </FormControl>
                        <label
-                        htmlFor="photoFile" // Conecta ao input escondido
-                        className={cn(buttonVariants({ variant: 'outline' }), 'cursor-pointer w-full flex items-center justify-center')}
+                        htmlFor="photoFile"
+                        className={cn(buttonVariants({ variant: 'outline' }), 'cursor-pointer w-full flex items-center justify-center', isSubmitting && "opacity-50 cursor-not-allowed")}
                       >
                         <Upload className="mr-2 h-4 w-4" /> Alterar Foto
                       </label>
@@ -242,33 +286,29 @@ export function UserProfileForm({ initialProfile, onSave }: UserProfileFormProps
                     </FormItem>
                   )}
                 />
-
                 {(previewImage) && (
-                  <Button variant="ghost" onClick={handleRemoveImage} className="w-full text-destructive hover:text-destructive hover:bg-destructive/10">
+                  <Button variant="ghost" onClick={handleRemoveImage} className="w-full text-destructive hover:text-destructive hover:bg-destructive/10" disabled={isSubmitting}>
                     <Trash2 className="mr-2 h-4 w-4" /> Remover Foto
                   </Button>
                 )}
                 <p className="text-xs text-muted-foreground text-center px-2">
-                  JPG, PNG, GIF, WEBP (Máx {MAX_FILE_SIZE_MB}MB). A imagem será redimensionada para {RESIZED_IMAGE_DIMENSION}x{RESIZED_IMAGE_DIMENSION}px.
+                  JPG, PNG, GIF, WEBP (Máx {MAX_FILE_SIZE_MB}MB). A imagem será redimensionada.
                 </p>
               </div>
 
-              {/* Coluna dos Campos do Formulário (à esquerda em desktop) */}
               <div className="flex-grow space-y-6">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nome Completo</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Seu nome" {...field} />
-                      </FormControl>
-                      <FormDescription>Como você gostaria de ser chamado?</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                 {/* Display Name and Email (read-only from auth) */}
+                <FormItem>
+                    <FormLabel>Nome Completo (Google)</FormLabel>
+                    <Input readOnly value={userName} className="bg-muted/50 cursor-default" />
+                    <FormDescription>Seu nome como configurado na conta Google.</FormDescription>
+                </FormItem>
+                <FormItem>
+                    <FormLabel>Email (Google)</FormLabel>
+                    <Input readOnly value={userEmail} className="bg-muted/50 cursor-default" />
+                     <FormDescription>Seu email de login.</FormDescription>
+                </FormItem>
+
                 <FormField
                   control={form.control}
                   name="monthlyIncome"
@@ -276,7 +316,7 @@ export function UserProfileForm({ initialProfile, onSave }: UserProfileFormProps
                     <FormItem>
                       <FormLabel>Renda Mensal (R$)</FormLabel>
                       <FormControl>
-                        <Input type="number" placeholder="Ex: 3000.00" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
+                        <Input type="number" placeholder="Ex: 3000.00" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} disabled={isSubmitting} />
                       </FormControl>
                       <FormDescription>Sua renda mensal líquida.</FormDescription>
                       <FormMessage />
@@ -290,7 +330,7 @@ export function UserProfileForm({ initialProfile, onSave }: UserProfileFormProps
                     <FormItem>
                       <FormLabel>CPF (Opcional)</FormLabel>
                       <FormControl>
-                        <Input placeholder="000.000.000-00" {...field} value={field.value ?? ''} />
+                        <Input placeholder="000.000.000-00" {...field} value={field.value ?? ''} disabled={isSubmitting} />
                       </FormControl>
                       <FormDescription>Seu Cadastro de Pessoa Física.</FormDescription>
                       <FormMessage />
@@ -304,7 +344,7 @@ export function UserProfileForm({ initialProfile, onSave }: UserProfileFormProps
                     <FormItem>
                       <FormLabel>Celular (Opcional)</FormLabel>
                       <FormControl>
-                        <Input placeholder="(00) 00000-0000" {...field} value={field.value ?? ''} />
+                        <Input placeholder="(00) 00000-0000" {...field} value={field.value ?? ''} disabled={isSubmitting} />
                       </FormControl>
                       <FormDescription>Seu número de celular com DDD.</FormDescription>
                       <FormMessage />
@@ -315,7 +355,10 @@ export function UserProfileForm({ initialProfile, onSave }: UserProfileFormProps
             </div>
 
             <div className="flex justify-end pt-4">
-                <Button type="submit" className="w-full md:w-auto">Salvar Alterações</Button>
+                <Button type="submit" className="w-full md:w-auto" disabled={isSubmitting || authLoading}>
+                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Salvar Alterações
+                </Button>
             </div>
           </form>
         </Form>

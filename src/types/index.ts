@@ -1,26 +1,63 @@
 
+export interface FirebaseUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+}
+
+export interface User {
+  id: string; // Firebase UID
+  email: string;
+  name?: string | null;
+  photoUrl?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  userProfile?: UserProfile;
+}
+
 export interface UserProfile {
-  name: string;
+  id: string;
+  userId: string;
   monthlyIncome: number;
   cpf?: string | null;
   cellphone?: string | null;
-  photoUrl?: string | null; // For future use with actual image storage
+  photoUrl?: string | null; 
+  createdAt: string;
+  updatedAt: string;
 }
+
+export interface Category {
+  id: string;
+  name: string;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExpenseCategory extends Category {}
+export interface IncomeCategory extends Category {}
+
 
 export interface Bill {
   id: string;
   payeeName: string;
   amount: number;
-  dueDate: string; // ISO string date
+  dueDate: string; // ISO string date YYYY-MM-DD
   type: 'expense' | 'income';
-  category?: string | null;
-  attachmentType?: 'pdf' | 'pix' | 'barcode';
-  attachmentValue?: string; // file path for PDF, or string for pix/barcode
   isPaid: boolean;
-  paymentDate?: string; // ISO string date
-  paymentReceipt?: string; // file path for receipt
+  paymentDate?: string; // ISO string date YYYY-MM-DD
+  paymentReceipt?: string;
+  attachmentType?: 'pdf' | 'pix' | 'barcode';
+  attachmentValue?: string;
   createdAt: string; // ISO string date
-  recurringBillId?: string; // Optional: link to the parent recurring bill
+  updatedAt: string;
+  userId: string;
+  expenseCategoryId?: string | null;
+  expenseCategory?: ExpenseCategory | null;
+  incomeCategoryId?: string | null;
+  incomeCategory?: IncomeCategory | null;
+  recurringBillId?: string | null;
 }
 
 export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
@@ -30,21 +67,26 @@ export interface RecurringBill {
   payeeName: string;
   amount: number;
   type: 'expense' | 'income';
-  category?: string | null;
   frequency: RecurrenceFrequency;
-  interval: number; // e.g., if frequency is 'monthly' and interval is 2, it means every 2 months
+  interval: number;
   startDate: string; // ISO string date (YYYY-MM-DD)
-  endDate?: string | null; // ISO string date (YYYY-MM-DD), optional
-  nextDueDate: string; // ISO string date (YYYY-MM-DD), calculated
-  lastGeneratedDate?: string | null; // ISO string date (YYYY-MM-DD), to track up to when instances were generated
+  endDate?: string | null; // ISO string date (YYYY-MM-DD)
+  nextDueDate: string; // ISO string date (YYYY-MM-DD)
+  lastGeneratedDate?: string | null;
   createdAt: string; // ISO string date
+  updatedAt: string;
+  userId: string;
+  expenseCategoryId?: string | null;
+  expenseCategory?: ExpenseCategory | null;
+  incomeCategoryId?: string | null;
+  incomeCategory?: IncomeCategory | null;
 }
 
 export interface Payment {
   billId: string;
   paymentDate: string; // ISO string date
-  receiptFile?: File; // For upload
-  receiptUrl?: string; // For display/storage
+  receiptFile?: File;
+  receiptUrl?: string;
 }
 
 export interface AttachmentData {
@@ -55,10 +97,13 @@ export interface AttachmentData {
 }
 
 export interface Budget {
-  id: string;
-  category: string; // Links to an expense category name
+  id:string;
   limit: number;
-  createdAt: string; // ISO string date
+  createdAt: string;
+  updatedAt: string;
+  userId: string;
+  expenseCategoryId: string;
+  expenseCategory: ExpenseCategory; // For relation loading
 }
 
 export interface FinancialGoal {
@@ -67,6 +112,8 @@ export interface FinancialGoal {
   targetAmount: number;
   currentAmount: number;
   targetDate?: string | null; // ISO string date YYYY-MM-DD
-  icon?: string; // Name of a lucide-react icon
+  icon?: string;
   createdAt: string; // ISO string date
+  updatedAt: string;
+  userId: string;
 }

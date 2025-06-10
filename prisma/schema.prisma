@@ -1,142 +1,162 @@
 
-generator client {
-  provider = "prisma-client-js"
-}
-
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @unique // Firebase UID
+  email     String   @unique
+  name      String?
+  photoUrl  String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userProfile       UserProfile?
+  bills             Bill[]
+  recurringBills    RecurringBill[]
+  budgets           Budget[]
+  financialGoals    FinancialGoal[]
+  expenseCategories ExpenseCategory[]
+  incomeCategories  IncomeCategory[]
+}
+
 model UserProfile {
   id            String    @id @default(cuid())
-  name          String
-  monthlyIncome Float
-  cpf           String?   @unique
-  cellphone     String?
-  photoUrl      String?   @db.Text
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monthlyIncome Float     @default(0)
+  cpf           String?   @db.VarChar(14) // Formato: 000.000.000-00
+  cellphone     String?   @db.VarChar(15) // Formato: (00) 00000-0000
+  photoUrl      String?   @db.Text // Armazena Data URL ou link para imagem
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-
-  bills           Bill[]
-  recurringBills  RecurringBill[]
-  budgets         Budget[]
-  financialGoals  FinancialGoal[]
-  // Assuming categories are global for now, or link to a user if they become user-specific
 }
 
-enum TransactionType {
-  expense
-  income
-}
-
-enum AttachmentType {
-  pdf
-  pix
-  barcode
-}
-
-model Bill {
-  id              String          @id @default(cuid())
-  payeeName       String
-  amount          Float
-  dueDate         DateTime        @db.Date // Store as Date only
-  type            TransactionType
-  category        String?
-  attachmentType  AttachmentType?
-  attachmentValue String?         @db.Text
-  isPaid          Boolean         @default(false)
-  paymentDate     DateTime?       @db.Date // Store as Date only
-  paymentReceipt  String?         @db.Text
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  recurringBillId String?
-  
-  userProfileId   String? // Optional: if you want to link bills to users in the future
-  userProfile     UserProfile? @relation(fields: [userProfileId], references: [id])
-
-  RecurringBill   RecurringBill? @relation(fields: [recurringBillId], references: [id], onDelete: SetNull)
-
-  @@index([userProfileId])
-  @@index([recurringBillId])
-}
-
-enum RecurrenceFrequency {
-  daily
-  weekly
-  monthly
-  yearly
-}
-
-model RecurringBill {
-  id                String              @id @default(cuid())
-  payeeName         String
-  amount            Float
-  type              TransactionType
-  category          String?
-  frequency         RecurrenceFrequency
-  interval          Int
-  startDate         DateTime            @db.Date // Store as Date only
-  endDate           DateTime?           @db.Date // Store as Date only
-  nextDueDate       DateTime            @db.Date // Store as Date only
-  lastGeneratedDate DateTime?           @db.Date // Store as Date only
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-
-  generatedBills Bill[] // Relation to bills generated from this recurring definition
-
-  userProfileId   String? // Optional: if you want to link recurring bills to users
-  userProfile     UserProfile? @relation(fields: [userProfileId], references: [id])
-
-  @@index([userProfileId])
-}
-
-model Budget {
-  id          String   @id @default(cuid())
-  category    String   // Links to an expense category name
-  limit       Float
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  userProfileId String? // Optional
-  userProfile   UserProfile? @relation(fields: [userProfileId], references: [id])
-
-  @@unique([userProfileId, category]) // Ensure unique budget per category per user
-  @@index([userProfileId])
-}
-
-model FinancialGoal {
-  id            String   @id @default(cuid())
-  name          String
-  targetAmount  Float
-  currentAmount Float    @default(0)
-  targetDate    DateTime? @db.Date // Store as Date only
-  icon          String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  userProfileId String? // Optional
-  userProfile   UserProfile? @relation(fields: [userProfileId], references: [id])
-
-  @@index([userProfileId])
-}
-
-// For categories, you might want a separate table if they become more complex
-// or need to be managed dynamically per user. For now, assuming they are string fields.
-// If you want them as separate tables:
 model ExpenseCategory {
   id        String   @id @default(cuid())
-  name      String   @unique
+  name      String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
-  // userProfileId String? // If categories are user-specific
-  // userProfile   UserProfile? @relation(fields: [userProfileId], references: [id])
+  updatedAt DateTime @updatedAt
+  bills     Bill[]
+  budgets   Budget[]
+  recurringBills RecurringBill[]
+
+
+  @@unique([userId, name])
 }
 
 model IncomeCategory {
   id        String   @id @default(cuid())
-  name      String   @unique
+  name      String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
-  // userProfileId String? // If categories are user-specific
-  // userProfile   UserProfile? @relation(fields: [userProfileId], references: [id])
+  updatedAt DateTime @updatedAt
+  bills     Bill[]
+  recurringBills RecurringBill[]
+
+  @@unique([userId, name])
 }
 
+model Bill {
+  id              String    @id @default(cuid())
+  payeeName       String
+  amount          Float
+  dueDate         DateTime  @db.Date // Apenas Data
+  type            String // "expense" ou "income"
+  isPaid          Boolean   @default(false)
+  paymentDate     DateTime? @db.Date
+  paymentReceipt  String?
+  attachmentType  String? // "pdf", "pix", "barcode"
+  attachmentValue String?   @db.Text
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  expenseCategoryId String?
+  expenseCategory   ExpenseCategory? @relation(fields: [expenseCategoryId], references: [id], onDelete: SetNull)
+
+  incomeCategoryId String?
+  incomeCategory   IncomeCategory? @relation(fields: [incomeCategoryId], references: [id], onDelete: SetNull)
+
+  recurringBillId String?
+  recurringBill   RecurringBill? @relation(fields: [recurringBillId], references: [id], onDelete: SetNull, map: "Bill_recurringBillId_fkey_optional")
+
+  @@index([userId])
+  @@index([expenseCategoryId])
+  @@index([incomeCategoryId])
+  @@index([recurringBillId])
+}
+
+model RecurringBill {
+  id                String    @id @default(cuid())
+  payeeName         String
+  amount            Float
+  type              String // "expense" ou "income"
+  frequency         String // "daily", "weekly", "monthly", "yearly"
+  interval          Int
+  startDate         DateTime  @db.Date
+  endDate           DateTime? @db.Date
+  nextDueDate       DateTime  @db.Date
+  lastGeneratedDate DateTime? @db.Date
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  expenseCategoryId String?
+  expenseCategory   ExpenseCategory? @relation(fields: [expenseCategoryId], references: [id], onDelete: SetNull)
+
+  incomeCategoryId String?
+  incomeCategory   IncomeCategory? @relation(fields: [incomeCategoryId], references: [id], onDelete: SetNull)
+  
+  generatedBills Bill[] @relation(map: "Bill_recurringBillId_fkey_optional")
+
+
+  @@index([userId])
+  @@index([expenseCategoryId])
+  @@index([incomeCategoryId])
+}
+
+model Budget {
+  id        String   @id @default(cuid())
+  limit     Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  expenseCategoryId String
+  expenseCategory   ExpenseCategory @relation(fields: [expenseCategoryId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expenseCategoryId])
+  @@unique([userId, expenseCategoryId])
+}
+
+model FinancialGoal {
+  id            String    @id @default(cuid())
+  name          String
+  targetAmount  Float
+  currentAmount Float
+  targetDate    DateTime? @db.Date
+  icon          String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

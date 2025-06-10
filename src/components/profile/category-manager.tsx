@@ -14,23 +14,25 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
+import type { ExpenseCategory, IncomeCategory } from '@/types'; // Import full category types
 
 interface CategoryManagerProps {
   type: 'expense' | 'income';
-  categories: string[];
-  onAddCategory: (category: string) => void;
-  onDeleteCategory: (category: string) => void;
+  categories: string[]; // Still used for quick check if name exists, but deletion uses ID
+  categoryObjects: (ExpenseCategory | IncomeCategory)[]; // Full objects for ID access
+  onAddCategory: (categoryName: string) => void; // Name is enough for adding
+  onDeleteCategory: (categoryName: string, categoryId?: string) => void; // ID is crucial for deletion
 }
 
-export function CategoryManager({ type, categories, onAddCategory, onDeleteCategory }: CategoryManagerProps) {
+export function CategoryManager({ type, categories, categoryObjects, onAddCategory, onDeleteCategory }: CategoryManagerProps) {
   const [newCategory, setNewCategory] = useState('');
   const { toast } = useToast();
 
   const handleAdd = () => {
-    if (newCategory.trim() === '') {
+    const trimmedCategory = newCategory.trim();
+    if (trimmedCategory === '') {
       toast({
         title: 'Nome Inválido',
         description: 'O nome da categoria não pode estar vazio.',
@@ -38,29 +40,27 @@ export function CategoryManager({ type, categories, onAddCategory, onDeleteCateg
       });
       return;
     }
-    if (categories.includes(newCategory.trim())) {
+    if (categories.some(catName => catName.toLowerCase() === trimmedCategory.toLowerCase())) {
       toast({
         title: 'Categoria Existente',
-        description: `A categoria "${newCategory.trim()}" já existe.`,
+        description: `A categoria "${trimmedCategory}" já existe.`,
         variant: 'destructive',
       });
       return;
     }
-    onAddCategory(newCategory.trim());
+    onAddCategory(trimmedCategory);
     setNewCategory('');
-    toast({
-      title: 'Categoria Adicionada!',
-      description: `Categoria "${newCategory.trim()}" adicionada com sucesso.`,
-    });
+    // Toast for add is handled in the page after successful API call
   };
 
-  const handleDelete = (category: string) => {
-    onDeleteCategory(category);
-    toast({
-      title: 'Categoria Removida!',
-      description: `Categoria "${category}" removida. As transações existentes com esta categoria não serão alteradas.`,
-      variant: 'default'
-    });
+  const handleDelete = (categoryName: string) => {
+    const categoryObject = categoryObjects.find(cat => cat.name === categoryName);
+    if (!categoryObject || !categoryObject.id) {
+        toast({ title: 'Erro ao Excluir', description: 'ID da categoria não encontrado.', variant: 'destructive'});
+        return;
+    }
+    onDeleteCategory(categoryName, categoryObject.id);
+    // Toast for delete is handled in the page after successful API call
   };
 
   return (
@@ -83,15 +83,15 @@ export function CategoryManager({ type, categories, onAddCategory, onDeleteCateg
       )}
 
       <ul className="space-y-2">
-        {categories.map((category) => (
+        {categories.map((categoryName) => ( // Iterate by name for display
           <li
-            key={category}
+            key={categoryName} // Use name for key as it's unique for display list
             className="flex items-center justify-between p-3 bg-secondary/30 rounded-md hover:bg-secondary/50 transition-colors"
           >
-            <span className="text-sm font-medium text-secondary-foreground">{category}</span>
+            <span className="text-sm font-medium text-secondary-foreground">{categoryName}</span>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive/80" aria-label={`Excluir categoria ${category}`}>
+                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive/80" aria-label={`Excluir categoria ${categoryName}`}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </AlertDialogTrigger>
@@ -99,14 +99,14 @@ export function CategoryManager({ type, categories, onAddCategory, onDeleteCateg
                 <AlertDialogHeader>
                   <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Tem certeza que deseja excluir a categoria "{category}"? 
-                    Esta ação não pode ser desfeita. As transações existentes com esta categoria permanecerão com ela, mas a categoria não estará mais disponível para novas transações.
+                    Tem certeza que deseja excluir a categoria "{categoryName}"? 
+                    Esta ação não pode ser desfeita. As transações existentes com esta categoria não serão alteradas (o vínculo será removido ou mantido como histórico, dependendo da lógica do backend).
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
                   <AlertDialogAction
-                    onClick={() => handleDelete(category)}
+                    onClick={() => handleDelete(categoryName)}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
                     Excluir
