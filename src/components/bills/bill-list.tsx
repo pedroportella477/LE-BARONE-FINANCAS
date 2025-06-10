@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -22,6 +23,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger, // Adicionada a importação que faltava
 } from "@/components/ui/alert-dialog";
 import type { Bill } from '@/types';
 import { cn } from '@/lib/utils';
@@ -191,3 +193,4 @@ const buttonVariants = ({ variant }: { variant: "destructive" | "default" | "out
   if (variant === "destructive") return "bg-destructive text-destructive-foreground hover:bg-destructive/90";
   return ""; 
 };
+
