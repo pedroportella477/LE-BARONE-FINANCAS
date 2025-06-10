@@ -1,0 +1,142 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model UserProfile {
+  id            String    @id @default(cuid())
+  name          String
+  monthlyIncome Float
+  cpf           String?   @unique
+  cellphone     String?
+  photoUrl      String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  bills           Bill[]
+  recurringBills  RecurringBill[]
+  budgets         Budget[]
+  financialGoals  FinancialGoal[]
+  // Assuming categories are global for now, or link to a user if they become user-specific
+}
+
+enum TransactionType {
+  expense
+  income
+}
+
+enum AttachmentType {
+  pdf
+  pix
+  barcode
+}
+
+model Bill {
+  id              String          @id @default(cuid())
+  payeeName       String
+  amount          Float
+  dueDate         DateTime        @db.Date // Store as Date only
+  type            TransactionType
+  category        String?
+  attachmentType  AttachmentType?
+  attachmentValue String?         @db.Text
+  isPaid          Boolean         @default(false)
+  paymentDate     DateTime?       @db.Date // Store as Date only
+  paymentReceipt  String?         @db.Text
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  recurringBillId String?
+  
+  userProfileId   String? // Optional: if you want to link bills to users in the future
+  userProfile     UserProfile? @relation(fields: [userProfileId], references: [id])
+
+  RecurringBill   RecurringBill? @relation(fields: [recurringBillId], references: [id], onDelete: SetNull)
+
+  @@index([userProfileId])
+  @@index([recurringBillId])
+}
+
+enum RecurrenceFrequency {
+  daily
+  weekly
+  monthly
+  yearly
+}
+
+model RecurringBill {
+  id                String              @id @default(cuid())
+  payeeName         String
+  amount            Float
+  type              TransactionType
+  category          String?
+  frequency         RecurrenceFrequency
+  interval          Int
+  startDate         DateTime            @db.Date // Store as Date only
+  endDate           DateTime?           @db.Date // Store as Date only
+  nextDueDate       DateTime            @db.Date // Store as Date only
+  lastGeneratedDate DateTime?           @db.Date // Store as Date only
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  generatedBills Bill[] // Relation to bills generated from this recurring definition
+
+  userProfileId   String? // Optional: if you want to link recurring bills to users
+  userProfile     UserProfile? @relation(fields: [userProfileId], references: [id])
+
+  @@index([userProfileId])
+}
+
+model Budget {
+  id          String   @id @default(cuid())
+  category    String   // Links to an expense category name
+  limit       Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userProfileId String? // Optional
+  userProfile   UserProfile? @relation(fields: [userProfileId], references: [id])
+
+  @@unique([userProfileId, category]) // Ensure unique budget per category per user
+  @@index([userProfileId])
+}
+
+model FinancialGoal {
+  id            String   @id @default(cuid())
+  name          String
+  targetAmount  Float
+  currentAmount Float    @default(0)
+  targetDate    DateTime? @db.Date // Store as Date only
+  icon          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  userProfileId String? // Optional
+  userProfile   UserProfile? @relation(fields: [userProfileId], references: [id])
+
+  @@index([userProfileId])
+}
+
+// For categories, you might want a separate table if they become more complex
+// or need to be managed dynamically per user. For now, assuming they are string fields.
+// If you want them as separate tables:
+model ExpenseCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  // userProfileId String? // If categories are user-specific
+  // userProfile   UserProfile? @relation(fields: [userProfileId], references: [id])
+}
+
+model IncomeCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  // userProfileId String? // If categories are user-specific
+  // userProfile   UserProfile? @relation(fields: [userProfileId], references: [id])
+}
+
